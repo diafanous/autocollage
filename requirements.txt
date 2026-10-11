@@ -1,2 +1,0 @@
-pillow>=10.1
-pymupdf>=1.24

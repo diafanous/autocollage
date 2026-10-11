@@ -3,12 +3,11 @@
 Drop in images or PDFs, cut them into sections, scatter and layer the sections into a new picture, export at print resolution.
 
 ```
-py -m pip install -r requirements.txt
-py server.py            # opens http://127.0.0.1:8765  (py server.py 9000 for another port)
-py test_collage.py
+uv run server.py        # opens http://127.0.0.1:8765  (uv run server.py 9000 for another port)
+uv run test_collage.py
 ```
 
-Python 3.10+, two dependencies (Pillow, PyMuPDF). Everything runs locally; the server only listens on 127.0.0.1.
+Needs [uv](https://docs.astral.sh/uv/); the first run creates the environment and installs the two dependencies (Pillow, PyMuPDF, listed in `pyproject.toml`). Python 3.10+. Everything runs locally; the server only listens on 127.0.0.1.
 
 ## How it works
 
