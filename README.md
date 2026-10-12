@@ -7,13 +7,17 @@ uv run server.py        # opens http://127.0.0.1:8765  (uv run server.py 9000 fo
 uv run test_collage.py
 ```
 
-Needs [uv](https://docs.astral.sh/uv/); the first run creates the environment and installs the two dependencies (Pillow, PyMuPDF, listed in `pyproject.toml`). Python 3.10+. Everything runs locally; the server only listens on 127.0.0.1.
+Needs [uv](https://docs.astral.sh/uv/); the first run installs Pillow, PyMuPDF, the HEIC codec and the MP4 encoder listed in `pyproject.toml`. Python 3.10+. Everything runs locally; the server only listens on 127.0.0.1.
 
 ## Windows desktop app
 
 Run `uv run --extra desktop desktop.py` to open Collage in its own resizable window. This keeps the existing HTML interface and Python image engine, but does not open an external browser. Windows needs the Microsoft Edge WebView2 Runtime.
 
-GitHub Actions builds the executable for pull requests and makes it available as a workflow artifact. On the first main-branch build for a project version, and whenever a new `v*` tag is pushed, it publishes `Collage.exe` to the repository's [Releases](https://github.com/diafanous/collage/releases) page. To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --exclude-module PIL._imagingft desktop.py` on Windows.
+GitHub Actions builds and tests the executable before publishing it to [Releases](https://github.com/diafanous/collage/releases). To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py` on Windows.
+
+Version 0.1.3 adds up to 16 layers, Ctrl+Z/Ctrl+Y edit history, a fixed sidebar header, export settings under the gear button, HEIC imports, and folder selection. Exports save to Downloads by default; choose another folder in settings to remember it. Existing exports receive numbered filenames rather than being overwritten.
+
+GIF and MP4 exports show the collage progression at a 720-pixel long edge. Smoothness controls frame count and pace controls duration; both have an animation preview. Triptych exports a PNG with the original, collage, and styled migration map in three equal panels. Map start/end markers are selectable; end markers can be scaled, and migration lines meet their edges. Use "save map settings as default" to remember map styling for future launches.
 
 ## How it works
 

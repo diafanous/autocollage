@@ -42,7 +42,7 @@ jobs:
         run: uv run --locked python test_collage.py
 
       - name: Build Collage.exe
-        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --exclude-module PIL._imagingft desktop.py
+        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py
 
       - name: Smoke-test packaged executable
         shell: pwsh
@@ -99,4 +99,3 @@ jobs:
           else
             gh release create "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --target "$GITHUB_SHA" --generate-notes --title "Collage $TAG_NAME"
           fi
-

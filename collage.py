@@ -8,11 +8,16 @@ import os
 import random
 import re
 import zipfile
+import tempfile
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import pymupdf
+from pillow_heif import register_heif_opener
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
+
+register_heif_opener()
 
 MAX_PIXELS = 400_000_000   # output cap: RGB at the cap is ~1.2 GB
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
@@ -30,10 +35,12 @@ SPEC = dict(
     gn=(2, 24, 8), gs=(0, 1, 0), gi=(0, 1, 0),                # guide grid: nodes across, pull to nearest node, node jitter
     draw=(0, 1, 0.7), blur=(0, 1, 0),                         # pull toward drawn strokes, edge softness
     con=(-1, 1, 0), lb=(0, 254, 0), lw=(1, 255, 255), lg=(0.2, 5, 1),   # contrast, levels black / white / gamma
-    layers=(1, 8, 2), opacity=(0.05, 1, 1), seed=(0, 9999, 1),
+    layers=(1, 16, 2), opacity=(0.05, 1, 1), seed=(0, 9999, 1),
     w=(0.25, 200, 8.5), h=(0.25, 200, 11), dpi=(10, 1200, 300), pv=(200, 3000, 1000),  # canvas in, dpi, preview px
     m1o=(0, 1, 0.8), m2o=(0, 1, 0.8), m3o=(0, 1, 1),          # migration map: line opacity per layer
     m1a=(0, 1, 1), m2a=(0, 1, 0), m3a=(0, 1, 0),              # migration map: paper opacity per layer (0 = no paper)
+    smoothness=(4, 24, 12), pace=(3, 30, 12),
+    node_end_size=(0.25, 6, 1),
 )
 COLORS = dict(bg="#f4f2ee", m1c="#8a8a90", m2c="#ff5a36", m3c="#18181b",   # canvas, map tone per layer
               m1p="#f4f2ee", m2p="#f4f2ee", m3p="#f4f2ee")                 # map paper per layer
@@ -48,6 +55,9 @@ def clean(raw):
     p["pts"] = pts[::max(1, -(-len(pts) // 400))]   # drawn points, thinned to <= 400 so the nearest-point search stays cheap
     c = raw.get("curve")
     p["curve"] = [min(max(round(float(v)), 0), 255) for v in c] if isinstance(c, list) and len(c) == 256 else IDENT
+    for key, default, choices in [('node_start', 'dot', ('none', 'dot', 'ring', 'square')), ('node_end', 'arrow', ('none', 'arrow', 'dot', 'ring', 'square'))]:
+        value = raw.get(key, default)
+        p[key] = value if value in choices else default
     return p
 
 
@@ -211,7 +221,7 @@ def _batches(pieces, ppi, budget=60e6):
         yield batch
 
 
-def render(p, items, ppi, resample):
+def render(p, items, ppi, resample, pieces=None):
     """items: [(PIL image, width_in, height_in)] -> RGB canvas of p.w x p.h inches at ppi."""
     W, H = p["w"], p["h"]
     cw, ch = round(W * ppi), round(H * ppi)
@@ -219,6 +229,9 @@ def render(p, items, ppi, resample):
     spin = Image.BICUBIC if resample == Image.LANCZOS else Image.BILINEAR
 
     def prep(pc):
+        opacity = p['opacity'] * (pc[11] if len(pc) > 11 else 1)
+        if opacity <= 0:
+            return None
         si, (u0, v0, u1, v1), cx, cy, w, h, ang = pc[:7]
         im = items[si][0]
         l, r = round((cx - w / 2) * ppi), round((cx + w / 2) * ppi)
@@ -237,12 +250,12 @@ def render(p, items, ppi, resample):
         if ang:
             tile = tile.convert("RGBA").rotate(ang, spin, expand=True)   # Pillow premultiplies RGBA: no dark fringe
         mask = tile if tile.mode == "RGBA" else None                       # an RGBA mask pastes by its alpha
-        if p["opacity"] < 1:
+        if opacity < 1:
             a = tile.getchannel("A") if mask else Image.new("L", tile.size, 255)
-            mask = a.point(lambda v: v * p["opacity"])
+            mask = a.point(lambda v: v * opacity)
         return tile, mask, (round(mx - tile.width / 2), round(my - tile.height / 2))
 
-    for batch in _batches(layout(p, [(w, h) for _, w, h in items], W, H), ppi):
+    for batch in _batches(pieces if pieces is not None else layout(p, [(w, h) for _, w, h in items], W, H), ppi):
         for res in POOL.map(prep, batch):
             if res:
                 canvas.paste(res[0], res[2], res[1])
@@ -296,6 +309,27 @@ def _sizes(specs, store):
 LAYERS = {1: "1 initial", 2: "2 migration", 3: "3 final"}
 
 
+def migration_line_end(p, pc):
+    """Intersect the center-to-center path with the destination marker boundary."""
+    bx, by, cx, cy = pc[7], pc[8], pc[2], pc[3]
+    d = math.hypot(cx-bx, cy-by)
+    if d < 1e-10:
+        return None
+    ux, uy = (cx-bx)/d, (cy-by)/d
+    style, radius = p['node_end'], .045*p['node_end_size']
+    if style in ('dot', 'ring'):
+        trim = radius
+    elif style == 'square':
+        trim = radius/max(abs(ux), abs(uy))
+    elif style == 'arrow' and d >= .05:
+        trim = min(.12*p['node_end_size'], d/3)
+    else:
+        trim = 0
+    if d <= trim:
+        return None
+    return cx-ux*trim, cy-uy*trim
+
+
 def _map_doc(raw, specs, store, layers):
     """Vector PDF of the canvas holding the given map layers (1 initial, 2 migration, 3 final), no pixels.
 
@@ -335,17 +369,30 @@ def _map_doc(raw, specs, store, layers):
 
     def lines(sh):
         for pc in pieces:
-            for a, b in zip(corners(*pc[7:], 0), corners(*pc[2:6], pc[6])):
-                sh.draw_line(pt(a), pt(b))
-            sh.draw_line(pt(pc[7:9]), pt(pc[2:4]))
+            # home_x/home_y are the center of the section's initial cut outline.
+            end = migration_line_end(p, pc)
+            if end is not None:
+                sh.draw_line(pt(pc[7:9]), pt(end))
 
-    def heads(sh):
+    def markers(sh, key, at_start=False):
         for pc in pieces:
             (bx, by), (cx, cy) = pc[7:9], pc[2:4]
+            if at_start:
+                bx, by, cx, cy = cx, cy, bx, by
+            scale = 1 if at_start else p['node_end_size']
+            style, radius = p[key], .045*scale
+            if style in ('dot', 'ring'):
+                sh.draw_circle(pt((cx, cy)), radius * 72)
+                continue
+            if style == 'square':
+                sh.draw_rect(pymupdf.Rect((cx-radius)*72, (cy-radius)*72, (cx+radius)*72, (cy+radius)*72))
+                continue
+            if style != 'arrow':
+                continue
             d = math.hypot(cx - bx, cy - by)
             if d < 0.05:   # barely moved: no arrow
                 continue
-            ux, uy, n = (cx - bx) / d, (cy - by) / d, min(0.12, d / 3)
+            ux, uy, n = (cx - bx) / d, (cy - by) / d, min(0.12*scale, d / 3)
             sh.draw_polyline([pt((cx, cy)), pt((cx - (ux + 0.4 * uy) * n, cy - (uy - 0.4 * ux) * n)),
                               pt((cx - (ux - 0.4 * uy) * n, cy - (uy + 0.4 * ux) * n))])
 
@@ -370,7 +417,8 @@ def _map_doc(raw, specs, store, layers):
             if p["draw"] > 0 and len(p["pts"]) > 1:
                 ink(2, strokes, closed=False, soft=0.6)
             ink(2, lines, closed=False)
-            ink(2, heads, fill=1)
+            ink(2, lambda sh: markers(sh, 'node_start', True), fill=0 if p['node_start'] == 'ring' else 1)
+            ink(2, lambda sh: markers(sh, 'node_end'), fill=0 if p['node_end'] == 'ring' else 1)
         else:
             ink(3, final, fill=0.15)
     return doc.tobytes(deflate=True)
@@ -434,14 +482,158 @@ def preview(raw, specs, store, as_map=False, show_grid=False):
     return buf.getvalue()
 
 
+def _gif_items(p, specs, store):
+    """Low-resolution source copies for the process animation."""
+    lut, items, originals = tone_lut(p), [], []
+    for s in specs:
+        src, pg, w = _spec(s, store)
+        im = thumb(src, pg).copy()
+        originals.append(im)
+        items.append((adjust(im, lut), w, w * im.height / im.width))
+    return items, originals
+
+
+def _gif_original(p, originals, ppi):
+    """Put each unchanged source on the canvas before the collage process starts."""
+    cw, ch = round(p["w"] * ppi), round(p["h"] * ppi)
+    canvas = Image.new("RGB", (cw, ch), p["bg"])
+    cols = max(1, math.ceil(math.sqrt(len(originals))))
+    rows = math.ceil(len(originals) / cols)
+    for n, source in enumerate(originals):
+        cell_w, cell_h = cw / cols, ch / rows
+        im = source.copy()
+        im.thumbnail((max(1, round(cell_w * .82)), max(1, round(cell_h * .82))), Image.LANCZOS)
+        x = round((n % cols + .5) * cell_w - im.width / 2)
+        y = round((n // cols + .5) * cell_h - im.height / 2)
+        canvas.paste(im, (x, y))
+    return canvas
+
+
+def _gif_label(im, label):
+    if im.width < 90 or im.height < 42:
+        return im
+    draw = ImageDraw.Draw(im)
+    box = (10, 10, min(im.width - 10, 12 + len(label) * 7), 31)
+    draw.rectangle(box, fill=(0, 0, 0))
+    draw.text((14, 14), label, fill=(255, 255, 255))
+    return im
+
+
+def animation_frames(raw, specs, store):
+    """Stable section geometry through each stage; the last frame is the final collage."""
+    p = clean(raw)
+    if not specs:
+        raise ValueError("add an image or PDF first")
+    ppi = 720 / max(p["w"], p["h"])
+    items, originals = _gif_items(p, specs, store)
+    steps = int(p['smoothness'])
+    sizes = [(w, h) for _, w, h in items]
+    pieces = layout(p, sizes, p['w'], p['h'])
+    counts = [0] + [len(layout(dict(p, layers=i), sizes, p['w'], p['h'])) for i in range(1, int(p['layers'])+1)]
+    first = pieces[:counts[1]]
+    home = [pc[:2] + (pc[7], pc[8], pc[9], pc[10], 0) + pc[7:] for pc in first]
+    q = dict(p, opacity=1, blur=0)
+    original = _gif_original(p, originals, ppi)
+    for _ in range(5):
+        yield _gif_label(original.copy(), 'original file')
+    portions = render(q, items, ppi, Image.BILINEAR, home)
+    for i in range(1, steps+1):
+        yield _gif_label(Image.blend(original, portions, i/steps), 'portioning')
+    for i in range(1, steps+1):
+        t = i/steps
+        rotated = [h[:6] + (pc[6]*t,) + h[7:] for h, pc in zip(home, first)]
+        yield _gif_label(render(q, items, ppi, Image.BILINEAR, rotated), 'rotation')
+    for i in range(1, steps+1):
+        t = i/steps; t = t*t*(3-2*t)
+        migrated = [pc[:2] + tuple(h[k]+(pc[k]-h[k])*t for k in range(2,6)) + pc[6:] for h, pc in zip(home, first)]
+        yield _gif_label(render(q, items, ppi, Image.BILINEAR, migrated), 'migration')
+    layer_ids = [layer for layer in range(int(p['layers'])) for _ in range(counts[layer+1]-counts[layer])]
+    for i in range(1, steps+1):
+        t = i/steps
+        accumulated = [pc + (1 if layer == 0 else min(1, max(0, t*(int(p['layers'])-1)-(layer-1))),) for pc, layer in zip(pieces, layer_ids)]
+        yield _gif_label(render(dict(p, opacity=1), items, ppi, Image.BILINEAR, accumulated), 'accumulation')
+    for i in range(1, steps+1):
+        yield _gif_label(render(dict(p, opacity=1+(p['opacity']-1)*i/steps), items, ppi, Image.BILINEAR, pieces), 'opacity')
+    final = render(p, items, ppi, Image.BILINEAR, pieces)
+    for _ in range(10):
+        yield final.copy()
+
+
+def process_gif(raw, specs, store):
+    p = clean(raw)
+    duration = max(20, round(p['pace']*1000/(5*int(p['smoothness'])+15)/10)*10)
+    frames = [im.quantize(colors=256) for im in animation_frames(raw, specs, store)]
+    buf = io.BytesIO()
+    frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:], duration=duration,
+                   loop=0, disposal=2, optimize=False)
+    return buf.getvalue()
+
+
+def process_mp4(raw, specs, store):
+    import imageio_ffmpeg
+    p = clean(raw)
+    fps = (5*int(p['smoothness'])+15)/p['pace']
+    with tempfile.TemporaryDirectory(prefix='collage-video-') as folder:
+        path = Path(folder) / 'collage-process.mp4'
+        writer = None
+        try:
+            for im in animation_frames(raw, specs, store):
+                size = (max(2, im.width + im.width % 2), max(2, im.height + im.height % 2))
+                if im.size != size:
+                    im = im.resize(size, Image.BILINEAR)
+                if writer is None:
+                    writer = imageio_ffmpeg.write_frames(str(path), size, fps=fps, codec='libx264',
+                        pix_fmt_in='rgb24', pix_fmt_out='yuv420p', macro_block_size=1,
+                        output_params=['-movflags', '+faststart'], ffmpeg_log_level='error')
+                    writer.send(None)
+                writer.send(im.tobytes())
+        finally:
+            if writer is not None:
+                writer.close()
+        return path.read_bytes()
+
+
+def triptych(raw, specs, store):
+    """Original sources, final collage and styled migration map as three equal panels."""
+    p = clean(raw)
+    dpi = p['dpi']
+    width, height = round(p['w']*dpi), round(p['h']*dpi)
+    gap = max(1, round(.15*dpi))
+    if (3*width+2*gap)*height > MAX_PIXELS:
+        raise ValueError('triptych is over the 400 MP limit; reduce size or DPI')
+    _, composed = compose(raw, specs, store, final=True)
+    originals = []
+    for s in specs:
+        src, pg, _ = _spec(s, store)
+        originals.append(raster(src,pg,dpi=min(dpi,600)))
+    original = _gif_original(p, originals, dpi)
+    with pymupdf.open(stream=migration_pdf(raw,specs,store), filetype='pdf') as doc:
+        pix = doc[0].get_pixmap(matrix=pymupdf.Matrix(dpi/72,dpi/72),alpha=False)
+        migration = Image.frombytes('RGB',(pix.width,pix.height),pix.samples)
+    if migration.size != composed.size:
+        migration = migration.resize(composed.size,Image.LANCZOS)
+    result = Image.new('RGB',(3*width+2*gap,height),p['bg'])
+    for i, panel in enumerate((original,composed,migration)):
+        result.paste(panel,(i*(width+gap),0))
+    buf = io.BytesIO()
+    result.save(buf,'PNG',dpi=(round(dpi),round(dpi)),compress_level=3)
+    return buf.getvalue()
+
+
 def export(raw, specs, store, fmt, lines=False):
-    """-> (file bytes, file name). fmt: png / tif / pdf, or map for the migration map (a zip of its PDFs).
+    """-> (file bytes, file name). fmt: png / tif / pdf / gif, or map for the migration map (a zip of its PDFs).
     With lines=True the portion linework is added, which also makes the result a zip."""
-    if fmt not in ("png", "tif", "pdf", "map"):
+    if fmt not in ("png", "tif", "pdf", "gif", "mp4", "map", "triptych"):
         raise ValueError(f"unknown format {fmt!r}")
     extra = portions_pdf(raw, specs, store) if lines else None   # cheap, so a bad request fails before the big render
     if fmt == "map":
         files = migration_pdfs(raw, specs, store)
+    elif fmt == "gif":
+        files = {"collage-process.gif": process_gif(raw, specs, store)}
+    elif fmt == 'mp4':
+        files = {'collage-process.mp4': process_mp4(raw, specs, store)}
+    elif fmt == 'triptych':
+        files = {'collage-triptych.png': triptych(raw,specs,store)}
     else:
         p, im = compose(raw, specs, store, final=True)
         dpi, buf = round(p["dpi"]), io.BytesIO()

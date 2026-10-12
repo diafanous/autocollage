@@ -138,7 +138,7 @@ def test_output_size_limit_and_clamping():
     else:
         raise AssertionError("no limit")
     p = C.clean({"cw": -5, "layers": 99, "bg": "red; drop table"})
-    assert (p["cw"], p["layers"], p["bg"]) == (0.05, 8, "#f4f2ee")
+    assert (p["cw"], p["layers"], p["bg"]) == (0.05, 16, "#f4f2ee")
 
 
 def two_sections():
@@ -261,7 +261,7 @@ def test_map_layers_have_their_own_tone_opacity_and_paper():
     assert all(d["fill"] is None or d["fill"] == (1.0, 0.0, 0.0) for d in two)                         # layer 2 has no paper
     assert two[0]["color"] == (1.0, 0.0, 0.0) and abs(two[0]["stroke_opacity"] - 0.5) < 1e-2            # tone + line opacity honoured
     assert three[0]["fill"] == (0.0, 1.0, 0.0) and abs(three[0]["fill_opacity"] - 0.5) < 1e-2          # layer 3 paper: green, half opaque
-    assert len(two[0]["items"]) == 16 * 5                                                              # 4 corner lines + 1 path per section
+    assert len(two[0]["items"]) == 16                                                                  # one center-to-node path per section
 
 
 def test_map_shows_the_grid_and_strokes_that_steered_it():
@@ -355,6 +355,79 @@ def test_a_busy_port_is_never_shared():
         a.shutdown()
         a.server_close()
     assert server.running(port) is None                                  # nothing answers once it has stopped
+
+
+def test_heic_animation_and_triptych_exports():
+    import imageio_ffmpeg
+    buf = io.BytesIO()
+    Image.new('RGB',(80,60),'#ed6139').save(buf,'HEIF',quality=95)
+    src = C.open_source('sample.heic',buf.getvalue())
+    assert src.thumbs[0].size == (80,60)
+    store, specs = {'heic':src}, [{'id':'heic','w':1,'page':0}]
+    raw = dict(w=1,h=.75,dpi=48,rot=35,scatter=.6,layers=2,opacity=.6,smoothness=4,pace=3)
+    frames = list(C.animation_frames(raw,specs,store))
+    items,_ = C._gif_items(C.clean(raw),specs,store)
+    final = C.render(C.clean(raw),items,720,Image.BILINEAR)
+    assert len(frames)==35 and ImageChops.difference(frames[-1],final).getbbox() is None
+    gif = Image.open(io.BytesIO(C.export(raw,specs,store,'gif')[0]))
+    assert gif.is_animated and gif.info['loop']==0
+    with tempfile.TemporaryDirectory() as folder:
+        path = pathlib.Path(folder)/'process.mp4'
+        path.write_bytes(C.export(raw,specs,store,'mp4')[0])
+        reader = imageio_ffmpeg.read_frames(str(path),pix_fmt='rgb24')
+        metadata = next(reader)
+        assert len(list(reader))==35 and abs(metadata['duration']-3)<.25
+    triple = Image.open(io.BytesIO(C.export(raw,specs,store,'triptych')[0]))
+    assert triple.size==(158,36) and round(triple.info['dpi'][0])==48
+    _, normal = C.compose(raw,specs,store,final=True)
+    assert ImageChops.difference(triple.crop((55,0,103,36)),normal).getbbox() is None
+
+
+def test_migration_node_boundaries_and_scaling():
+    import math
+    for scale in (.25,1,6):
+        for style in ('none','dot','ring','square','arrow'):
+            p = C.clean(dict(node_end=style,node_end_size=scale))
+            for cx,cy in ((1,0),(0,1),(1,1),(-1,1)):
+                pc = (0,(0,0,1,1),cx,cy,1,1,0,0,0,1,1)
+                end = C.migration_line_end(p,pc)
+                gap = math.hypot(cx-end[0],cy-end[1])
+                if style in ('dot','ring'):
+                    assert abs(gap-.045*scale)<1e-9
+                elif style=='square':
+                    assert abs(max(abs(cx-end[0]),abs(cy-end[1]))-.045*scale)<1e-9
+                elif style=='arrow':
+                    assert abs(gap-min(.12*scale,math.hypot(cx,cy)/3))<1e-9
+                else:
+                    assert gap<1e-9
+
+
+def test_sixteen_layers_supported():
+    p = C.clean({**FLAT,'layers':16,'w':1,'h':1,'dpi':64})
+    assert p['layers']==16
+    assert len(C.layout(p,[(1,1)],1,1))==16*len(C.layout({**p,'layers':1},[(1,1)],1,1))
+    store = {'source':C.open_source('layers.png',png(64,64,color='red')[1])}
+    _, im = C.compose(p,[{'id':'source','w':1}],store,final=True)
+    assert im.size==(64,64)
+
+
+def test_export_folder_persistence_and_no_overwrite():
+    original_settings, original_folder = server.SETTINGS_PATH, server.EXPORT_FOLDER
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            server.SETTINGS_PATH = pathlib.Path(folder)/'settings.json'
+            selected = server.set_export_folder(folder)
+            assert json.loads(server.SETTINGS_PATH.read_text())['export_folder']==str(selected)
+            first = server.save_export(b'one','collage.png')
+            second = server.save_export(b'two','collage.png')
+            assert first.name=='collage.png' and second.name=='collage (1).png'
+            assert first.read_bytes()==b'one' and second.read_bytes()==b'two'
+            defaults = server.save_map_defaults({'m2c':'#ff0000','node_end':'ring','node_end_size':3})
+            server.set_export_folder(folder)
+            assert server.map_defaults()==defaults and defaults['node_end_size']==3
+            assert defaults['m2c']=='#ff0000' and defaults['node_end']=='ring'
+    finally:
+        server.SETTINGS_PATH, server.EXPORT_FOLDER = original_settings, original_folder
 
 
 if __name__ == "__main__":

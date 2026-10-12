@@ -23,6 +23,95 @@ def resource_root():
 
 ROOT = resource_root()
 STORE = {}   # id -> collage.Source, for this session only
+
+
+def downloads_folder():
+    if os.name == 'nt':
+        import ctypes
+        folder_id = (ctypes.c_byte * 16).from_buffer_copy(uuid.UUID('374DE290-123F-4565-9164-39C4925E467B').bytes_le)
+        path = ctypes.c_wchar_p()
+        if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(folder_id), 0, None, ctypes.byref(path)) == 0:
+            result = Path(path.value)
+            ctypes.windll.ole32.CoTaskMemFree(path)
+            return result
+    return Path.home() / 'Downloads'
+
+
+SETTINGS_PATH = Path(os.environ.get('LOCALAPPDATA') or Path.home()) / 'Collage' / 'settings.json'
+EXPORT_FOLDER = downloads_folder()
+try:
+    saved_folder = json.loads(SETTINGS_PATH.read_text(encoding='utf-8')).get('export_folder')
+    if saved_folder and Path(saved_folder).is_dir():
+        EXPORT_FOLDER = Path(saved_folder)
+except (OSError, ValueError, TypeError):
+    pass
+
+
+def set_export_folder(folder):
+    global EXPORT_FOLDER
+    selected = Path(folder.strip().strip('"')).expanduser().resolve()
+    if not selected.is_dir():
+        raise ValueError('choose an existing export folder')
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    update_settings({'export_folder': str(selected)})
+    EXPORT_FOLDER = selected
+    return selected
+
+
+def read_settings():
+    try:
+        data = json.loads(SETTINGS_PATH.read_text(encoding='utf-8'))
+        return data if isinstance(data,dict) else {}
+    except (OSError,ValueError):
+        return {}
+
+
+SETTINGS_LOCK = threading.Lock()
+MAP_KEYS = tuple(k for k in collage.SPEC if k.startswith('m') and k[1:2] in ('1','2','3')) + tuple(k for k in collage.COLORS if k.startswith('m')) + ('node_start','node_end','node_end_size')
+
+
+def update_settings(changes):
+    with SETTINGS_LOCK:
+        data = read_settings()
+        data.update(changes)
+        SETTINGS_PATH.parent.mkdir(parents=True,exist_ok=True)
+        temporary = SETTINGS_PATH.with_suffix('.tmp')
+        temporary.write_text(json.dumps(data),encoding='utf-8')
+        temporary.replace(SETTINGS_PATH)
+
+
+def map_defaults():
+    raw = read_settings().get('map_defaults',{})
+    if not isinstance(raw,dict) or not raw:
+        return {}
+    p = collage.clean(raw)
+    return {k:p[k] for k in MAP_KEYS}
+
+
+def save_map_defaults(raw):
+    p = collage.clean(raw)
+    defaults = {k:p[k] for k in MAP_KEYS}
+    update_settings({'map_defaults':defaults})
+    return defaults
+
+
+def save_export(data, name, folder=None):
+    destination = Path(folder) if folder is not None else EXPORT_FOLDER
+    if destination == downloads_folder():
+        destination.mkdir(parents=True, exist_ok=True)
+    if not destination.is_dir():
+        raise ValueError('export folder no longer exists; select another folder')
+    name = Path(name).name
+    stem, suffix = Path(name).stem, Path(name).suffix
+    for number in range(10000):
+        target = destination / (name if number == 0 else f'{stem} ({number}){suffix}')
+        try:
+            with target.open('xb') as output:
+                output.write(data)
+            return target.resolve()
+        except FileExistsError:
+            continue
+    raise ValueError('too many files with this export name')
 # Changes when the code does. A server still running older code reports a different one, so a new launch won't reuse it.
 if getattr(sys, "frozen", False):
     # PyInstaller embeds Python modules in its archive, so their .py files are
@@ -31,7 +120,7 @@ if getattr(sys, "frozen", False):
     STAMP = str(Path(sys.executable).stat().st_mtime_ns)
 else:
     STAMP = str(max((ROOT / f).stat().st_mtime_ns for f in ("collage.py", "server.py")))
-EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp", ".gif", ".pdf"}
+EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp", ".gif", ".pdf", ".heic", ".heif"}
 
 
 def add_source(name, data):
@@ -98,6 +187,8 @@ class Handler(BaseHTTPRequestHandler):
         def go():
             if self.path == "/version":
                 self.reply(200, STAMP.encode(), "text/plain")
+            elif self.path == '/export-settings':
+                self.reply(200, {'folder': str(EXPORT_FOLDER), 'map_defaults': map_defaults()})
             elif self.path == "/":
                 self.reply(200, (ROOT / "index.html").read_bytes(), "text/html; charset=utf-8")
             elif self.path.startswith("/font/") and self.path.endswith(".woff2") and self.path[6:-6] in ("Light", "Regular", "Medium"):
@@ -109,8 +200,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         def go():
-            if self.path == "/source":
+            if self.path == '/export-settings':
+                req = json.loads(self.body())
+                self.reply(200, {'folder': str(set_export_folder(str(req['folder'])))})
+            elif self.path == '/map-defaults':
+                req = json.loads(self.body())
+                self.reply(200, {'map_defaults': save_map_defaults(req['settings'])})
+            elif self.path == "/source":
                 self.reply(200, add_source(unquote(self.headers.get("X-Name", "untitled")), self.body()))
+            elif self.path == "/folder-info":
+                req = json.loads(self.body())
+                _, total = pick_files(str(req["path"]), 1)
+                self.reply(200, dict(total=total))
             elif self.path == "/folder":
                 req = json.loads(self.body())
                 files, total = pick_files(str(req["path"]), int(req["n"]))
@@ -125,10 +226,17 @@ class Handler(BaseHTTPRequestHandler):
                 req, t0 = json.loads(self.body()), time.perf_counter()
                 jpg = collage.preview(req["p"], req["sources"], STORE, bool(req.get("map")), bool(req.get("grid")))
                 self.reply(200, jpg, "image/jpeg", X_Ms=str(round((time.perf_counter() - t0) * 1000)))
+            elif self.path.startswith('/animation/'):
+                fmt, req = self.path[11:], json.loads(self.body())
+                if fmt not in ('gif', 'mp4'):
+                    raise ValueError('choose GIF or MP4 for an animation preview')
+                data, _ = collage.export(req['p'], req['sources'], STORE, fmt)
+                self.reply(200, data, 'image/gif' if fmt == 'gif' else 'video/mp4')
             elif self.path.startswith("/export/"):
                 fmt, req = self.path[8:], json.loads(self.body())
                 data, name = collage.export(req["p"], req["sources"], STORE, fmt, bool(req.get("lines")))
-                self.reply(200, data, "application/octet-stream", X_Name=name)
+                saved = save_export(data, name)
+                self.reply(200, {'path': str(saved), 'name': saved.name})
             else:
                 self.reply(404, {"error": "not found"})
         self.guarded(go)

@@ -11,6 +11,13 @@ from pathlib import Path
 from urllib.request import urlopen
 
 
+class DesktopAPI:
+    def choose_folder(self):
+        import webview
+        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        return result[0] if result else None
+
+
 def webview_storage_path() -> Path:
     """Keep WebView2's profile in a stable, per-user writable folder."""
     local_app_data = os.environ.get("LOCALAPPDATA")
@@ -35,7 +42,7 @@ def run_gui_smoke_test(url: str, webview) -> None:
         try:
             title = window.evaluate_js("document.title")
             has_controls = window.evaluate_js(
-                "['open', 'pick', 'go', 'unit'].every(id => document.getElementById(id))"
+                "['open', 'pick', 'go', 'unit', 'animpreview', 'node_end_size', 'exportfolder'].every(id => document.getElementById(id))"
             )
             if str(title).strip().lower() != "collage" or not has_controls:
                 raise RuntimeError("desktop smoke test loaded an unexpected page")
@@ -100,6 +107,24 @@ def configure_smoke_logging(webview) -> None:
     logger.propagate = False
 
 
+def verify_packaged_formats():
+    """Exercise the codecs and data files inside the frozen executable."""
+    import io
+    import collage
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGB',(64,48),'#ed6139').save(buf,'HEIF',quality=90)
+    source = collage.open_source('smoke.heic',buf.getvalue())
+    specs, store = [{'id':'smoke','w':1,'page':0}], {'smoke':source}
+    raw = dict(w=1,h=.75,dpi=32,rot=35,scatter=.6,smoothness=4,pace=3)
+    for fmt in ('png','tif','pdf','gif','mp4','map','triptych'):
+        data,name = collage.export(raw,specs,store,fmt)
+        if len(data)<100:
+            raise RuntimeError(f'packaged {fmt} export produced no data')
+        if fmt=='mp4' and data[4:8]!=b'ftyp':
+            raise RuntimeError('packaged MP4 encoder produced an invalid file')
+
+
 def main() -> int:
     server = None
     server_thread = None
@@ -131,6 +156,7 @@ def main() -> int:
                 if response.status != 200 or not response.read():
                     raise RuntimeError("desktop smoke test could not read the server version")
             if smoke_test:
+                verify_packaged_formats()
                 run_gui_smoke_test(f"http://127.0.0.1:{port}", webview)
             return 0
 
@@ -140,6 +166,7 @@ def main() -> int:
             width=1280,
             height=900,
             min_size=(840, 620),
+            js_api=DesktopAPI(),
         )
         webview.start(storage_path=str(webview_storage_path()))
         return 0
@@ -167,4 +194,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

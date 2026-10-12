@@ -12,7 +12,7 @@
 *{box-sizing:border-box;margin:0}
 [hidden]{display:none!important}
 html,body{height:100%}
-body{background:var(--bg);color:var(--fg);font:12px/1.5 "Paper Mono",ui-monospace,Consolas,monospace;display:grid;grid-template-columns:1fr 340px;overflow:hidden}
+body{background:var(--bg);color:var(--fg);font:12px/1.5 "Paper Mono",ui-monospace,Consolas,monospace;display:grid;grid-template-columns:1fr 380px;overflow:hidden}
 body.drag #stage{outline:1px dashed var(--fg);outline-offset:-14px}
 
 #stage{position:relative;display:grid;place-items:center;background:var(--stage);min-width:0;min-height:0;overflow:hidden}
@@ -25,9 +25,20 @@ body.drag #stage{outline:1px dashed var(--fg);outline-offset:-14px}
 #toast{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:6px 12px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:80%}
 #toast.on{opacity:1}
 
-aside{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:0 22px 24px}
-header{display:flex;align-items:center;gap:12px;height:52px;font-weight:500}
-header #ms{margin-left:auto;color:var(--dim);font-weight:400}
+aside{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:0 22px}
+header{display:flex;align-items:center;gap:10px;flex:0 0 52px;height:52px;font-weight:500}
+header #ms{margin-left:auto;color:var(--dim);font-weight:400;white-space:nowrap}
+header select,header strong,header button{flex-shrink:0}
+header #ms{min-width:0;overflow:hidden;text-overflow:ellipsis}
+header button{font-size:17px;line-height:1}
+header button:disabled{opacity:.35;cursor:default}
+header #go{display:inline-block;white-space:nowrap;margin:0;padding:4px 7px;font-size:12px;min-width:0;max-width:124px;flex-shrink:1;overflow:hidden;text-overflow:ellipsis}
+#sideScroll,#settingsPanel{flex:1;min-height:0;overflow:auto;padding-bottom:24px}
+#settingsPanel{padding-top:16px}
+#settingsPanel h2 button{color:var(--fg)}
+#motionDialog{margin:auto;background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:18px;max-width:90vw;max-height:90vh}
+#motionDialog::backdrop{background:#0009}
+#motionDialog img,#motionDialog video{display:block;max-width:80vw;max-height:70vh;margin:auto}
 section{border-top:1px solid var(--line);padding:16px 0 6px}
 h2{font:inherit;color:var(--dim);display:flex;justify-content:space-between;margin-bottom:12px}
 h2 em{font-style:normal}
@@ -62,6 +73,11 @@ input[type=range]::-moz-range-thumb{width:10px;height:10px;border:0;border-radiu
 .row label:has(:disabled){opacity:.4;cursor:default}
 #fpath{flex:1;text-align:left}
 #fn{width:40px}
+#folderbtn{display:flex;align-items:center}
+#folderbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5}
+#exportfolder{flex:1;width:100%;font-size:11px}
+#exportbrowse svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5}
+#foldername{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
 #curve{display:block;width:220px;height:220px;margin:0 auto 10px;border:1px solid var(--line);touch-action:none;cursor:crosshair}
 .note{color:var(--dim);margin:-6px 0 14px}
 button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
@@ -78,6 +94,7 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
 .file .tag.warn{color:var(--fg)}
 .file .tag.warn::before{content:"! "}
 .seg{display:flex;gap:14px}
+#fmt{flex-wrap:wrap;gap:10px;justify-content:flex-end}
 .seg button.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
 #go{display:block;text-align:center;border:1px solid var(--fg);color:var(--fg);padding:9px 0;margin:6px 0 12px}
 #go:hover:not(:disabled){background:var(--fg);color:var(--bg)}
@@ -99,15 +116,23 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
   <div id="toast" role="status"></div>
 </main>
 <aside>
-  <header>collage <span id="ms"></span>
+  <header>
+    <strong>collage</strong><span id="ms"></span>
+    <button id="undo" aria-label="undo" title="Undo (Ctrl+Z)" disabled>↶</button>
+    <button id="redo" aria-label="redo" title="Redo (Ctrl+Y)" disabled>↷</button>
+    <button id="go" title="Export the current collage"></button>
+    <button id="settings" aria-label="export settings" title="Export settings" aria-expanded="false">⚙</button>
     <select id="unit" aria-label="units"><option>in</option><option>cm</option><option>mm</option></select>
   </header>
+  <div id="sideScroll">
   <section>
     <h2>source</h2>
     <div id="files"></div>
     <div class="row"><button id="add">+ add image / pdf</button></div>
-    <div class="row"><input id="fpath" placeholder="random from folder: paste its path" aria-label="folder path"><input id="fn" type="number" min="1" max="50" value="3" title="how many files" aria-label="how many files"><button id="fgo">pick</button></div>
-    <input id="pick" type="file" multiple accept="image/*,.pdf,application/pdf" hidden>
+    <div class="row"><button id="folderbtn" aria-label="select folder" title="Select a folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></button><button id="fselect">select</button><span id="foldername" class="grow" hidden></span></div>
+    <div class="row" id="folderPath" hidden><input id="fpath" placeholder="folder path" aria-label="folder path"><button id="fconfirm">select</button></div>
+    <div class="row" id="folderCount" hidden><label for="fn" class="grow">number of files</label><input id="fn" type="number" min="1" max="50" value="3" aria-label="how many files"><button id="fgo">add files</button></div>
+    <input id="pick" type="file" multiple accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,application/pdf" hidden>
   </section>
   <section><h2>cut <em id="cutinfo"></em></h2><div id="sl-cut"></div>
     <div class="row"><span class="grow">section size</span><input id="cwv" type="number" step="any" aria-label="section width"><span>×</span><input id="chv" type="number" step="any" aria-label="section height"><span id="cu"></span></div>
@@ -125,13 +150,27 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
     <h2>layers</h2><div id="sl-layers"></div>
     <div class="row"><span>seed</span><button id="seed">↻ <span id="seedn"></span></button><span class="grow"></span><span>paper</span><input id="bg" type="color" aria-label="background colour"></div>
   </section>
+  </div>
+  <div id="settingsPanel" hidden>
   <section>
-    <h2>output</h2>
+    <h2>export settings <button id="closeSettings">done</button></h2>
+    <div class="row"><span>export folder</span></div>
+    <div class="row"><input id="exportfolder" aria-label="export folder" placeholder="Downloads"><button id="exportbrowse" aria-label="choose export folder" title="Choose export folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></button></div>
     <div class="row"><span class="grow">size</span><input id="ow" type="number" step="any" aria-label="output width"><span>×</span><input id="oh" type="number" step="any" aria-label="output height"><span id="ou"></span></div>
     <div class="row"><span class="grow">dpi</span><input id="dpi" type="number" min="10" max="1200" list="dpis" aria-label="dpi"><datalist id="dpis"><option>72<option>150<option>300<option>600<option>1200</datalist></div>
-    <div class="row"><span class="grow">file</span><div class="seg" id="fmt"><button data-f="png" class="on">png</button><button data-f="tif">tif</button><button data-f="pdf">pdf</button><button data-f="map" title="vector pdf of how every section moved">map</button></div></div>
+    <div class="row"><span class="grow">file</span><div class="seg" id="fmt"><button data-f="png" class="on">png</button><button data-f="tif">tif</button><button data-f="pdf">pdf</button><button data-f="gif" title="animated process from source to finished collage">gif</button><button data-f="mp4" title="video of the collage process">mp4</button><button data-f="map" title="vector pdf of how every section moved">map</button><button data-f="triptych" title="PNG of original, collage and migration map side by side">triptych</button></div></div>
+    <div id="animsec" hidden>
+      <div class="sl"><span>smoothness</span><output id="smoothnessv">12</output><input id="smoothness" type="range" min="4" max="24" step="1" value="12" aria-label="animation smoothness"></div>
+      <div class="sl"><span>pace</span><output id="pacev">12 seconds</output><input id="pace" type="range" min="3" max="30" step="1" value="12" aria-label="animation duration"></div>
+      <div class="row"><button id="animpreview">preview animation</button></div>
+      <div class="note">lower pace = faster · higher smoothness = more frames</div>
+    </div>
     <div class="row"><label><input id="lines" type="checkbox"><span>also save portion linework</span></label></div>
     <div id="mapsec" hidden>
+      <div class="row"><span class="grow">start node</span><select id="node_start" aria-label="migration start node"><option value="none">none</option><option value="dot" selected>dot</option><option value="ring">ring</option><option value="square">square</option></select></div>
+      <div class="row"><span class="grow">end node</span><select id="node_end" aria-label="migration end node"><option value="none">none</option><option value="arrow" selected>arrow</option><option value="dot">dot</option><option value="ring">ring</option><option value="square">square</option></select></div>
+      <div class="sl"><span>end node size</span><output id="node_end_sizev">1.00×</output><input id="node_end_size" type="range" min="0.25" max="6" step="0.05" value="1" aria-label="migration end node size"></div>
+      <div class="row"><button id="saveMapDefaults">save map settings as default</button></div>
       <div class="row"><b>1 initial</b></div>
       <div class="row"><span class="grow">tone / opacity</span><input type="color" id="m1c" aria-label="initial tone"><input type="range" id="m1o" min="0" max="1" step=".01" aria-label="initial line opacity"></div>
       <div class="row"><span class="grow">paper / opacity</span><input type="color" id="m1p" aria-label="initial paper colour"><input type="range" id="m1a" min="0" max="1" step=".01" aria-label="initial paper opacity"></div>
@@ -144,9 +183,10 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
       <div class="note">downloads a zip: the three layers as separate vector pdfs (each with its own paper, paper opacity 0 = none) to print and stack, plus one pdf holding all three as layers. the stage shows them stacked.</div>
     </div>
     <div id="px"></div>
-    <button id="go"></button>
   </section>
+  </div>
 </aside>
+<dialog id="motionDialog" aria-label="animation preview"><h2>process preview <button id="motionClose">close</button></h2><img id="gifPreview" alt="collage process animation" hidden><video id="mp4Preview" controls loop playsinline hidden></video></dialog>
 <script>
 const $ = s => document.querySelector(s), UN = {in: 1, cm: 2.54, mm: 25.4};
 const pc = v => Math.round(v * 100) + '%'; pc.pct = true;                      // .pct: typed 25 means 25%
@@ -162,17 +202,118 @@ const SL = {
            ['draw', 'drawing pull', 0, 1, .01, .7, pc]],
   tone: [['con', 'contrast', -1, 1, .01, 0, sg], ['lb', 'black point', 0, 254, 1, 0, v => v], ['lw', 'white point', 1, 255, 1, 255, v => v],
          ['lg', 'gamma', .2, 5, .01, 1, v => v.toFixed(2)]],
-  layers: [['layers', 'layers', 1, 8, 1, 2, v => v], ['opacity', 'opacity', .05, 1, .01, 1, pc]],
+  layers: [['layers', 'layers', 1, 16, 1, 2, v => v], ['opacity', 'opacity', .05, 1, .01, 1, pc]],
 };
 const P = {}, SLIDER = {}, st = {files: [], w: 0, h: 0, touched: false, dpi: 300, fmt: 'png', bg: '#f4f2ee', unit: 'in', seed: 1,
   grid: false,   // guide grid overlay on the preview
   // migration map, per layer: tone, line opacity, paper colour, paper opacity (0 = no paper)
-  map: {m1c: '#8a8a90', m1o: .8, m1p: '#f4f2ee', m1a: 1, m2c: '#ff5a36', m2o: .8, m2p: '#f4f2ee', m2a: 0, m3c: '#18181b', m3o: 1, m3p: '#f4f2ee', m3a: 0}};
+  map: {smoothness: 12, pace: 12, node_start: 'dot', node_end: 'arrow', node_end_size: 1, m1c: '#8a8a90', m1o: .8, m1p: '#f4f2ee', m1a: 1, m2c: '#ff5a36', m2o: .8, m2p: '#f4f2ee', m2a: 0, m3c: '#18181b', m3o: 1, m3p: '#f4f2ee', m3a: 0}};
 const show = v => +(v * UN[st.unit]).toFixed(st.unit === 'mm' ? 1 : 2);
 const toIn = v => v / UN[st.unit];
 
 let tt;
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), 5000); }
+
+// ---- edit history: control changes, output settings, curve points and guide strokes
+const undoStack = [], redoStack = [];
+let historyBefore = null, historyTimer, historyPinned = false;
+const copy = v => JSON.parse(JSON.stringify(v));
+function editSnapshot() {
+  return {
+    P: copy(P), settings: {w: st.w, h: st.h, touched: st.touched, dpi: st.dpi, fmt: st.fmt, bg: st.bg,
+      unit: st.unit, seed: st.seed, grid: st.grid, map: copy(st.map), inkOn: $('#inkbtn').classList.contains('on')},
+    lines: $('#lines').checked,
+    files: st.files.map(f => ({id: f.id, w: f.w, page: f.page, edited: f.edited})),
+    strokes: copy(strokes), cpts: copy(cpts)
+  };
+}
+function historyButtons() {
+  $('#undo').disabled = !undoStack.length; $('#redo').disabled = !redoStack.length;
+}
+function finishHistory() {
+  clearTimeout(historyTimer); historyTimer = null; historyPinned = false;
+  if (!historyBefore) return;
+  const after = editSnapshot();
+  if (JSON.stringify(historyBefore) !== JSON.stringify(after)) {
+    undoStack.push(historyBefore); if (undoStack.length > 80) undoStack.shift();
+    redoStack.length = 0; historyButtons();
+  }
+  historyBefore = null;
+}
+function beginHistory(pin = false) {
+  if (!historyBefore) historyBefore = editSnapshot();
+  historyPinned = historyPinned || pin;
+  clearTimeout(historyTimer);
+  if (!historyPinned) historyTimer = setTimeout(finishHistory, 550);
+}
+function endPinnedHistory() {
+  historyPinned = false; clearTimeout(historyTimer); historyTimer = setTimeout(finishHistory, 100);
+}
+function restoreEdit(s) {
+  Object.keys(P).forEach(k => delete P[k]); Object.assign(P, s.P);
+  Object.assign(st, s.settings); Object.assign(st.map, s.settings.map);
+  st.files.forEach(f => { const saved = s.files.find(x => x.id === f.id); if (saved) Object.assign(f, saved); });
+  $('#lines').checked = s.lines; $('#unit').value = st.unit; $('#dpi').value = st.dpi; $('#bg').value = st.bg;
+  $('#seedn').textContent = st.seed;
+  document.querySelectorAll('#fmt button').forEach(b => b.classList.toggle('on', b.dataset.f === st.fmt));
+  $('#mapsec').hidden = !['map','triptych'].includes(st.fmt);
+  $('#animsec').hidden = !['gif', 'mp4'].includes(st.fmt); motionLabels();
+  for (const [id, value] of Object.entries(st.map)) {
+    const el = $('#' + id); el.value = value;
+    if (el.type === 'range') el.style.setProperty('--p', (value-el.min)/(el.max-el.min)*100 + '%');
+  }
+  for (const [k, control] of Object.entries(SLIDER)) if (P[k] !== undefined) { control.r.value = P[k]; control.set(); }
+  strokes.splice(0, strokes.length, ...copy(s.strokes)); cpts = copy(s.cpts);
+  $('#inkbtn').classList.toggle('on', s.settings.inkOn); ink.classList.toggle('on', s.settings.inkOn);
+  tools(); files(); info(); outUI(); inkRedraw(); curveSet(false); historyButtons();
+}
+function undo() {
+  finishHistory(); if (!undoStack.length) return;
+  redoStack.push(editSnapshot()); restoreEdit(undoStack.pop());
+}
+function redo() {
+  finishHistory(); if (!redoStack.length) return;
+  undoStack.push(editSnapshot()); restoreEdit(redoStack.pop());
+}
+function typingTarget(el) {
+  return el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' ||
+    (el.tagName === 'INPUT' && !['range', 'color', 'checkbox', 'radio', 'button'].includes(el.type));
+}
+const discreteHistoryButtons = new Set(['seed', 'inkbtn', 'inkclear', 'gridbtn', 'curvereset']);
+document.addEventListener('input', e => { if (e.target.id !== 'pick') beginHistory(); }, true);
+document.addEventListener('change', e => { if (e.target.id !== 'pick') beginHistory(); }, true);
+document.addEventListener('pointerdown', e => {
+  if (e.target.matches('input[type=range]') || e.target === ink || e.target === cv) {
+    finishHistory(); beginHistory(true);
+  }
+}, true);
+document.addEventListener('pointerup', endPinnedHistory, true);
+document.addEventListener('pointercancel', endPinnedHistory, true);
+document.addEventListener('dblclick', e => { if (e.target.matches('input[type=range]')) { finishHistory(); beginHistory(); } }, true);
+document.addEventListener('click', e => {
+  if (discreteHistoryButtons.has(e.target.closest('button')?.id) || e.target.closest('#fmt button') || e.target.closest('#lines')) {
+    finishHistory(); beginHistory(); setTimeout(finishHistory, 0);
+  }
+}, true);
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !typingTarget(e.target)) {
+    const key = e.key.toLowerCase();
+    if (key === 'z' || key === 'y') {
+      e.preventDefault(); key === 'y' || e.shiftKey ? redo() : undo(); return;
+    }
+  }
+  if (e.target.matches?.('input[type=range]') && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) beginHistory(true);
+}, true);
+document.addEventListener('keyup', e => {
+  if (e.target.matches?.('input[type=range]')) endPinnedHistory();
+}, true);
+$('#undo').onclick = undo; $('#redo').onclick = redo;
+$('#settings').onclick = () => {
+  const open = $('#settingsPanel').hidden;
+  $('#settingsPanel').hidden = !open; $('#sideScroll').hidden = open;
+  $('#settings').setAttribute('aria-expanded', String(open));
+};
+$('#closeSettings').onclick = $('#settings').onclick;
 
 // ---- sliders
 for (const [sec, list] of Object.entries(SL)) for (const [k, label, min, max, step, def, f] of list) {
@@ -265,7 +406,8 @@ function syncOut() {
 }
 function outUI() {
   $('#ow').value = st.w ? show(st.w) : ''; $('#oh').value = st.h ? show(st.h) : ''; $('#ou').textContent = st.unit;
-  const w = Math.round(st.w * st.dpi), h = Math.round(st.h * st.dpi), big = w * h > 4e8;
+  const panelWidth = Math.round(st.w * st.dpi), h = Math.round(st.h * st.dpi);
+  const w = st.fmt === 'triptych' ? 3*panelWidth+2*Math.max(1,Math.round(.15*st.dpi)) : panelWidth, big = w * h > 4e8;
   const map = st.fmt === 'map', lines = $('#lines');
   $('#px').textContent = !st.w ? '' : map ? `vector · ${show(st.w)} × ${show(st.h)} ${st.unit}`
     : `${w} × ${h} px · ${(w * h / 1e6).toFixed(1)} MP${big ? ' · over the 400 MP limit' : ''}`;
@@ -281,7 +423,7 @@ $('#dpi').oninput = () => { if (+$('#dpi').value > 0) { st.dpi = +$('#dpi').valu
 $('#fmt').onclick = e => {
   const f = e.target.dataset.f; if (!f) return;
   st.fmt = f; document.querySelectorAll('#fmt button').forEach(b => b.classList.toggle('on', b === e.target));
-  $('#mapsec').hidden = f !== 'map'; outUI(); draw(false);   // the stage shows the map while it's the chosen output
+  $('#mapsec').hidden = !['map','triptych'].includes(f); $('#animsec').hidden = !['gif', 'mp4'].includes(f); outUI(); draw(false);
 };
 $('#unit').onchange = e => { st.unit = e.target.value; files(); info(); outUI(); };
 $('#seed').onclick = () => { st.seed = Math.floor(Math.random() * 10000); $('#seedn').textContent = st.seed; draw(false); };
@@ -320,18 +462,109 @@ $('#go').onclick = async () => {
   if (!st.files.length) return toast('add an image or pdf first');
   const b = $('#go'); b.disabled = true; b.textContent = 'rendering…';
   try {
+    await exportFolderReady;
+    await saveExportFolder();
     const r = await fetch('/export/' + st.fmt, {method: 'POST', body: body()});
     if (!r.ok) throw new Error((await r.json()).error);
-    const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = r.headers.get('X-Name') || 'collage.' + st.fmt; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 6e4);
+    const result = await r.json(); toast('saved to ' + result.path);
   } catch (e) { toast(e.message); }
   b.disabled = false; outUI();
 };
+const exportFolderReady = fetch('/export-settings').then(async r => {
+  if (!r.ok) throw new Error('could not load export folder');
+  const settings = await r.json(); $('#exportfolder').value = settings.folder;
+  Object.assign(st.map,settings.map_defaults || {});
+  for (const [key,value] of Object.entries(settings.map_defaults || {})) {
+    const el = $('#'+key); if (!el) continue; el.value = value;
+    if (el.type==='range') el.style.setProperty('--p',(el.value-el.min)/(el.max-el.min)*100+'%');
+  }
+  motionLabels(); draw(false);
+}).catch(e => toast(e.message));
+async function saveExportFolder() {
+  const r = await fetch('/export-settings', {method:'POST', body:JSON.stringify({folder:$('#exportfolder').value})});
+  const result = await r.json(); if (!r.ok) throw new Error(result.error);
+  $('#exportfolder').value = result.folder;
+}
+$('#exportfolder').onchange = () => saveExportFolder().catch(e => toast(e.message));
+$('#exportbrowse').onclick = async () => {
+  if (window.pywebview?.api?.choose_folder) {
+    try {
+      const path = await window.pywebview.api.choose_folder();
+      if (path) { $('#exportfolder').value = path; await saveExportFolder(); }
+    } catch (e) { toast(e.message); }
+  } else { $('#exportfolder').focus(); $('#exportfolder').select(); }
+};
+$('#saveMapDefaults').onclick = async () => {
+  const b = $('#saveMapDefaults'); b.disabled = true;
+  try {
+    const r = await fetch('/map-defaults',{method:'POST',body:JSON.stringify({settings:st.map})});
+    const result = await r.json(); if (!r.ok) throw new Error(result.error);
+    toast('map settings saved as default');
+  } catch (e) { toast(e.message); }
+  finally { b.disabled = false; }
+};
+let motionUrl = null;
+function motionLabels() {
+  $('#node_end_sizev').textContent = (+st.map.node_end_size).toFixed(2) + '×';
+  $('#smoothnessv').textContent = st.map.smoothness;
+  $('#pacev').textContent = st.map.pace + ' seconds';
+}
+function clearMotion() {
+  $('#mp4Preview').pause(); $('#mp4Preview').removeAttribute('src'); $('#mp4Preview').load();
+  $('#gifPreview').removeAttribute('src');
+  if (motionUrl) { URL.revokeObjectURL(motionUrl); motionUrl = null; }
+}
+$('#motionClose').onclick = () => $('#motionDialog').close();
+$('#motionDialog').onclose = clearMotion;
+$('#animpreview').onclick = async () => {
+  if (!st.files.length) return toast('add an image or pdf first');
+  const format = st.fmt, b = $('#animpreview'); b.disabled = true; b.textContent = 'preparing preview…';
+  try {
+    const r = await fetch('/animation/' + format, {method: 'POST', body: body()});
+    if (!r.ok) throw new Error((await r.json()).error);
+    clearMotion(); motionUrl = URL.createObjectURL(await r.blob());
+    $('#gifPreview').hidden = format !== 'gif'; $('#mp4Preview').hidden = format !== 'mp4';
+    const media = $(format === 'gif' ? '#gifPreview' : '#mp4Preview'); media.src = motionUrl;
+    $('#motionDialog').showModal();
+    if (format === 'mp4') media.play().catch(() => {});
+  } catch (e) { toast(e.message); }
+  finally { b.disabled = false; b.textContent = 'preview animation'; }
+};
 // ---- random files from a folder: replaces the previous random pick, keeps files you added yourself
+async function confirmFolder() {
+  const path = $('#fpath').value.trim();
+  if (!path) return toast('select a folder first');
+  const b = $('#fconfirm'); b.disabled = true;
+  try {
+    const r = await fetch('/folder-info', {method: 'POST', body: JSON.stringify({path})});
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    $('#foldername').textContent = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+    $('#foldername').title = path; $('#foldername').hidden = false;
+    $('#fn').max = Math.min(50, j.total); $('#fn').value = Math.min(+$('#fn').value || 3, +$('#fn').max);
+    $('#folderPath').hidden = true; $('#folderCount').hidden = false; $('#fn').focus(); $('#fn').select();
+  } catch (e) { toast(e.message); }
+  finally { b.disabled = false; }
+}
+async function chooseFolder() {
+  if (window.pywebview?.api?.choose_folder) {
+    try {
+      const path = await window.pywebview.api.choose_folder();
+      if (path) { $('#fpath').value = path; await confirmFolder(); }
+    } catch (e) { toast(e.message); }
+  } else {
+    $('#folderPath').hidden = !$('#folderPath').hidden;
+    if (!$('#folderPath').hidden) $('#fpath').focus();
+  }
+}
+$('#folderbtn').onclick = $('#fselect').onclick = chooseFolder;
+$('#fconfirm').onclick = confirmFolder;
+$('#fpath').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); confirmFolder(); } };
 $('#fgo').onclick = async () => {
   const b = $('#fgo'); b.disabled = true;
   try {
-    const r = await fetch('/folder', {method: 'POST', body: JSON.stringify({path: $('#fpath').value, n: +$('#fn').value || 1})});
+    const count = +$('#fn').value;
+    if (!Number.isInteger(count) || count < 1 || count > +$('#fn').max) throw new Error(`choose between 1 and ${$('#fn').max} files`);
+    const r = await fetch('/folder', {method: 'POST', body: JSON.stringify({path: $('#fpath').value, n: count})});
     const j = await r.json(); if (!r.ok) throw new Error(j.error);
     st.files.filter(f => f.folder).forEach(f => fetch('/source/' + f.id, {method: 'DELETE'}));
     st.files = st.files.filter(f => !f.folder).concat(j.sources.map(s => ({...s, page: 1, edited: false, folder: true})));
@@ -414,9 +647,9 @@ $('#curvereset').onclick = () => { cpts = [[0, 0], [1, 1]]; curveSet(false); };
 
 // ---- migration map controls
 for (const [id, v] of Object.entries(st.map)) {
-  const el = $('#' + id), fill = () => el.type === 'range' && el.style.setProperty('--p', el.value * 100 + '%');
+  const el = $('#' + id), fill = () => el.type === 'range' && el.style.setProperty('--p', (el.value-el.min)/(el.max-el.min)*100 + '%');
   el.value = v; fill();
-  el.oninput = () => { st.map[id] = el.type === 'range' ? +el.value : el.value; fill(); draw(true); };
+  el.oninput = () => { st.map[id] = el.type === 'range' ? +el.value : el.value; fill(); motionLabels(); draw(true); };
   el.onchange = () => draw(false);
 }
 
