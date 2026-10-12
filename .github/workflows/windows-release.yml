@@ -14,6 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 15
     outputs:
       version_tag: ${{ steps.project_version.outputs.tag }}
     steps:
@@ -37,14 +38,16 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --extra desktop --group build
 
+      - name: Verify Collage processing and server
+        run: uv run --locked python test_collage.py
+
       - name: Build Collage.exe
         run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." desktop.py
-
 
       - name: Smoke-test packaged executable
         shell: pwsh
         run: |
-          $smoke = Start-Process -FilePath ".\\dist\\Collage.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WindowStyle Hidden
+          $smoke = Start-Process -FilePath ".\dist\Collage.exe" -ArgumentList "--smoke-test" -Wait -PassThru
           if ($smoke.ExitCode -ne 0) { throw "Packaged desktop smoke test failed with exit code $($smoke.ExitCode)" }
 
       - name: Upload executable
@@ -83,3 +86,4 @@ jobs:
           else
             gh release create "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --target "$GITHUB_SHA" --generate-notes --title "Collage $TAG_NAME"
           fi
+
