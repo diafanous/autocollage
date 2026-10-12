@@ -16,10 +16,21 @@ from urllib.parse import unquote
 
 import collage
 
-ROOT = Path(__file__).parent
+def resource_root():
+    """Return the directory containing bundled data files when frozen."""
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+
+
+ROOT = resource_root()
 STORE = {}   # id -> collage.Source, for this session only
 # Changes when the code does. A server still running older code reports a different one, so a new launch won't reuse it.
-STAMP = str(max((ROOT / f).stat().st_mtime_ns for f in ("collage.py", "server.py")))
+if getattr(sys, "frozen", False):
+    # PyInstaller embeds Python modules in its archive, so their .py files are
+    # not present beside the extracted data files. The executable's timestamp
+    # is stable across launches and changes when the bundled app is replaced.
+    STAMP = str(Path(sys.executable).stat().st_mtime_ns)
+else:
+    STAMP = str(max((ROOT / f).stat().st_mtime_ns for f in ("collage.py", "server.py")))
 EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp", ".gif", ".pdf"}
 
 

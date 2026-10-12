@@ -40,6 +40,13 @@ jobs:
       - name: Build Collage.exe
         run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." desktop.py
 
+
+      - name: Smoke-test packaged executable
+        shell: pwsh
+        run: |
+          $smoke = Start-Process -FilePath ".\\dist\\Collage.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WindowStyle Hidden
+          if ($smoke.ExitCode -ne 0) { throw "Packaged desktop smoke test failed with exit code $($smoke.ExitCode)" }
+
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
