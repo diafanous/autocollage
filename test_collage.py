@@ -402,6 +402,19 @@ def test_migration_node_boundaries_and_scaling():
                     assert gap<1e-9
 
 
+def test_plain_text_settings_preserve_alterations_without_image_data():
+    raw = {**FLAT,'layers':16,'rot':42,'unit':'cm','grid_visible':True,
+           'node_end':'ring','node_end_size':3,'pts':[[.1,.2],[.8,.9]],'curve':list(range(256))}
+    data,name = C.export(raw,[],{},'txt',lines=True)
+    saved = json.loads(data)
+    assert name=='collage-settings.txt' and len(data)<10000
+    assert saved['parameters']['layers']==16 and saved['parameters']['rot']==42
+    assert saved['parameters']['pts']==raw['pts'] and saved['parameters']['curve']==raw['curve']
+    assert saved['parameters']['node_end_size']==3 and saved['units']=='cm'
+    assert saved['portion_linework'] and saved['guides']['grid_visible']
+    assert saved['sources']==[]
+
+
 def test_sixteen_layers_supported():
     p = C.clean({**FLAT,'layers':16,'w':1,'h':1,'dpi':64})
     assert p['layers']==16

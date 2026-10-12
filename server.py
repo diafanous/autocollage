@@ -37,7 +37,8 @@ def downloads_folder():
     return Path.home() / 'Downloads'
 
 
-SETTINGS_PATH = Path(os.environ.get('LOCALAPPDATA') or Path.home()) / 'Collage' / 'settings.json'
+SETTINGS_ROOT = (Path.home()/'Library'/'Application Support') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA') or Path.home())
+SETTINGS_PATH = SETTINGS_ROOT / 'Collage' / 'settings.json'
 EXPORT_FOLDER = downloads_folder()
 try:
     saved_folder = json.loads(SETTINGS_PATH.read_text(encoding='utf-8')).get('export_folder')

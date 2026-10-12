@@ -1,4 +1,4 @@
-name: Windows desktop build
+name: Desktop builds
 
 on:
   pull_request:
@@ -70,17 +70,76 @@ jobs:
           path: dist/Collage.exe
           if-no-files-found: error
 
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: AppleSilicon
+          - runner: macos-15-intel
+            arch: Intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --extra desktop --group build
+
+      - name: Verify processing and server
+        run: uv run --locked python test_collage.py
+
+      - name: Build Collage.app
+        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onedir --windowed --name Collage --osx-bundle-identifier com.diafanous.collage --add-data "index.html:." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py
+
+      - name: Smoke-test packaged Mac app
+        env:
+          COLLAGE_SMOKE_LOG: ${{ runner.temp }}/Collage-smoke.log
+          COLLAGE_WEBVIEW_LOG: ${{ runner.temp }}/Collage-webview.log
+        run: |
+          uv run --locked python - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          try:
+              subprocess.run(['dist/Collage.app/Contents/MacOS/Collage','--smoke-test'],timeout=120,check=True)
+          finally:
+              for name in ('COLLAGE_SMOKE_LOG','COLLAGE_WEBVIEW_LOG'):
+                  log = Path(os.environ[name])
+                  if log.exists():
+                      print(log.read_text())
+          PY
+
+      - name: Package Mac app
+        run: ditto -c -k --sequesterRsrc --keepParent dist/Collage.app "dist/Collage-macOS-${{ matrix.arch }}.zip"
+
+      - name: Upload Mac app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Collage-macOS-${{ matrix.arch }}
+          path: dist/Collage-macOS-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download executable
+      - name: Download desktop builds
         uses: actions/download-artifact@v4
         with:
-          name: Collage-Windows
+          pattern: Collage-*
+          merge-multiple: true
           path: dist
 
       - name: Publish GitHub release
@@ -94,8 +153,8 @@ jobs:
             if [ "$IS_MAIN_PUSH" = "true" ]; then
               echo "Release $TAG_NAME already exists; leaving it unchanged."
             else
-              gh release upload "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --clobber
+              gh release upload "$TAG_NAME" dist/Collage.exe dist/Collage-macOS-*.zip --repo "$REPOSITORY" --clobber
             fi
           else
-            gh release create "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --target "$GITHUB_SHA" --generate-notes --title "Collage $TAG_NAME"
+            gh release create "$TAG_NAME" dist/Collage.exe dist/Collage-macOS-*.zip --repo "$REPOSITORY" --target "$GITHUB_SHA" --generate-notes --title "Collage $TAG_NAME"
           fi

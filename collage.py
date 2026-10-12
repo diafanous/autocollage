@@ -3,6 +3,7 @@
 All geometry is in inches, so a 1000px preview and a 600 dpi export of the same params are the same picture.
 """
 import io
+import json
 import math
 import os
 import random
@@ -620,11 +621,28 @@ def triptych(raw, specs, store):
     return buf.getvalue()
 
 
+def settings_text(raw, specs, store, lines=False):
+    p = clean(raw)
+    p.pop('pv',None)  # transient screen-preview resolution is not an edit
+    sources = []
+    for spec in specs:
+        src, page, width = _spec(spec,store)
+        sources.append({'name':src.name,'width_inches':width,'page':page+1})
+    unit = raw.get('unit','in')
+    document = {'format':'Collage settings','schema_version':1,
+                'units':unit if unit in ('in','cm','mm') else 'in',
+                'parameters':p,'guides':{'grid_visible':bool(raw.get('grid_visible'))},
+                'portion_linework':bool(lines),'sources':sources}
+    return (json.dumps(document,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
+
+
 def export(raw, specs, store, fmt, lines=False):
     """-> (file bytes, file name). fmt: png / tif / pdf / gif, or map for the migration map (a zip of its PDFs).
     With lines=True the portion linework is added, which also makes the result a zip."""
-    if fmt not in ("png", "tif", "pdf", "gif", "mp4", "map", "triptych"):
+    if fmt not in ("png", "tif", "pdf", "gif", "mp4", "map", "triptych", "txt"):
         raise ValueError(f"unknown format {fmt!r}")
+    if fmt=='txt':
+        return settings_text(raw,specs,store,lines), 'collage-settings.txt'
     extra = portions_pdf(raw, specs, store) if lines else None   # cheap, so a bad request fails before the big render
     if fmt == "map":
         files = migration_pdfs(raw, specs, store)

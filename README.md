@@ -9,13 +9,17 @@ uv run test_collage.py
 
 Needs [uv](https://docs.astral.sh/uv/); the first run installs Pillow, PyMuPDF, the HEIC codec and the MP4 encoder listed in `pyproject.toml`. Python 3.10+. Everything runs locally; the server only listens on 127.0.0.1.
 
-## Windows desktop app
+## Desktop apps
+
+Release downloads include `Collage.exe` for Windows and separate `Collage-macOS-AppleSilicon.zip` and `Collage-macOS-Intel.zip` archives for macOS 15 or later. On a Mac, unzip the matching archive and move `Collage.app` into Applications. Mac builds use ad-hoc signing and are not Apple-notarized; macOS may require approval in System Settings > Privacy & Security on first launch.
 
 Run `uv run --extra desktop desktop.py` to open Collage in its own resizable window. This keeps the existing HTML interface and Python image engine, but does not open an external browser. Windows needs the Microsoft Edge WebView2 Runtime.
 
 GitHub Actions builds and tests the executable before publishing it to [Releases](https://github.com/diafanous/collage/releases). To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py` on Windows.
 
 Version 0.1.3 adds up to 16 layers, Ctrl+Z/Ctrl+Y edit history, a fixed sidebar header, export settings under the gear button, HEIC imports, and folder selection. Exports save to Downloads by default; choose another folder in settings to remember it. Existing exports receive numbered filenames rather than being overwritten.
+
+Version 0.1.4 adds native Mac builds and a lightweight TXT export of slider values, tone curves, drawing guide points, source metadata, and map settings. The TXT file contains readable UTF-8 JSON and does not embed source images.
 
 GIF and MP4 exports show the collage progression at a 720-pixel long edge. Smoothness controls frame count and pace controls duration; both have an animation preview. Triptych exports a PNG with the original, collage, and styled migration map in three equal panels. Map start/end markers are selectable; end markers can be scaled, and migration lines meet their edges. Use "save map settings as default" to remember map styling for future launches.
 

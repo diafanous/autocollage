@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import threading
+import tempfile
 import traceback
 from pathlib import Path
 from urllib.request import urlopen
@@ -20,6 +21,10 @@ class DesktopAPI:
 
 def webview_storage_path() -> Path:
     """Keep WebView2's profile in a stable, per-user writable folder."""
+    if sys.platform=='darwin':
+        path = Path.home()/'Library'/'Application Support'/'Collage'/'WebView'
+        path.mkdir(parents=True,exist_ok=True)
+        return path
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
         local_app_data = str(Path.home() / "AppData" / "Local")
@@ -78,7 +83,7 @@ def run_gui_smoke_test(url: str, webview) -> None:
 def write_smoke_error(message: str | None = None) -> None:
     log_path = os.environ.get("COLLAGE_SMOKE_LOG")
     if not log_path:
-        temp_dir = Path(os.environ.get("TEMP", Path.home() / "AppData" / "Local" / "Temp"))
+        temp_dir = Path(tempfile.gettempdir())
         log_path = str(temp_dir / "Collage-smoke-error.log")
     try:
         Path(log_path).parent.mkdir(parents=True, exist_ok=True)
@@ -117,7 +122,7 @@ def verify_packaged_formats():
     source = collage.open_source('smoke.heic',buf.getvalue())
     specs, store = [{'id':'smoke','w':1,'page':0}], {'smoke':source}
     raw = dict(w=1,h=.75,dpi=32,rot=35,scatter=.6,smoothness=4,pace=3)
-    for fmt in ('png','tif','pdf','gif','mp4','map','triptych'):
+    for fmt in ('png','tif','pdf','gif','mp4','map','triptych','txt'):
         data,name = collage.export(raw,specs,store,fmt)
         if len(data)<100:
             raise RuntimeError(f'packaged {fmt} export produced no data')
@@ -179,7 +184,14 @@ def main() -> int:
         try:
             import ctypes
 
-            ctypes.windll.user32.MessageBoxW(0, message, "Collage", 0x10)
+            if sys.platform=='darwin':
+                from AppKit import NSAlert
+                alert = NSAlert.alloc().init()
+                alert.setMessageText_('Collage could not start')
+                alert.setInformativeText_(str(error))
+                alert.runModal()
+            else:
+                ctypes.windll.user32.MessageBoxW(0, message, "Collage", 0x10)
         except Exception:
             pass
         return 1

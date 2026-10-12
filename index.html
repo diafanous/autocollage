@@ -158,7 +158,7 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
     <div class="row"><input id="exportfolder" aria-label="export folder" placeholder="Downloads"><button id="exportbrowse" aria-label="choose export folder" title="Choose export folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></button></div>
     <div class="row"><span class="grow">size</span><input id="ow" type="number" step="any" aria-label="output width"><span>×</span><input id="oh" type="number" step="any" aria-label="output height"><span id="ou"></span></div>
     <div class="row"><span class="grow">dpi</span><input id="dpi" type="number" min="10" max="1200" list="dpis" aria-label="dpi"><datalist id="dpis"><option>72<option>150<option>300<option>600<option>1200</datalist></div>
-    <div class="row"><span class="grow">file</span><div class="seg" id="fmt"><button data-f="png" class="on">png</button><button data-f="tif">tif</button><button data-f="pdf">pdf</button><button data-f="gif" title="animated process from source to finished collage">gif</button><button data-f="mp4" title="video of the collage process">mp4</button><button data-f="map" title="vector pdf of how every section moved">map</button><button data-f="triptych" title="PNG of original, collage and migration map side by side">triptych</button></div></div>
+    <div class="row"><span class="grow">file</span><div class="seg" id="fmt"><button data-f="png" class="on">png</button><button data-f="tif">tif</button><button data-f="pdf">pdf</button><button data-f="gif" title="animated process from source to finished collage">gif</button><button data-f="mp4" title="video of the collage process">mp4</button><button data-f="map" title="vector pdf of how every section moved">map</button><button data-f="triptych" title="PNG of original, collage and migration map side by side">triptych</button><button data-f="txt" title="Plain text of slider settings, tone curve, drawing and map alterations">txt</button></div></div>
     <div id="animsec" hidden>
       <div class="sl"><span>smoothness</span><output id="smoothnessv">12</output><input id="smoothness" type="range" min="4" max="24" step="1" value="12" aria-label="animation smoothness"></div>
       <div class="sl"><span>pace</span><output id="pacev">12 seconds</output><input id="pace" type="range" min="3" max="30" step="1" value="12" aria-label="animation duration"></div>
@@ -414,7 +414,8 @@ function outUI() {
   $('#px').classList.toggle('warn', big && !map);
   lines.disabled = !(P.ps < .999);   // linework only exists when portions are in play
   if (lines.disabled) lines.checked = false;
-  $('#go').textContent = 'export ' + st.fmt + (lines.checked ? ' + linework' : '');
+  if (st.fmt==='txt') $('#px').textContent = 'plain text · settings and alterations';
+  $('#go').textContent = 'export ' + st.fmt + (lines.checked && st.fmt!=='txt' ? ' + linework' : '');
 }
 $('#lines').onchange = outUI;
 $('#ow').oninput = () => { if (+$('#ow').value > 0) { st.w = toIn(+$('#ow').value); st.touched = true; outUI(); draw(false); } };
@@ -433,7 +434,7 @@ $('#bg').value = st.bg; $('#dpi').value = st.dpi; $('#seedn').textContent = st.s
 
 // ---- render: one request in flight; sliders drag at half resolution, then sharpen on release
 const body = () => JSON.stringify({
-  p: {...P, ...st.map, seed: st.seed, bg: st.bg, w: st.w, h: st.h, dpi: st.dpi, pv: st.pv,
+  p: {...P, ...st.map, seed: st.seed, bg: st.bg, w: st.w, h: st.h, dpi: st.dpi, pv: st.pv, unit:st.unit, grid_visible:st.grid,
       pts: strokes.flat().map(([x, y]) => [+x.toFixed(4), +y.toFixed(4)])},
   sources: st.files.map(f => ({id: f.id, w: f.w, page: f.page - 1})),
   map: st.fmt === 'map', grid: st.grid, lines: $('#lines').checked});
@@ -459,7 +460,7 @@ async function draw(fast) {
 let rs; addEventListener('resize', () => { clearTimeout(rs); rs = setTimeout(() => draw(false), 120); });
 
 $('#go').onclick = async () => {
-  if (!st.files.length) return toast('add an image or pdf first');
+  if (!st.files.length && st.fmt!=='txt') return toast('add an image or pdf first');
   const b = $('#go'); b.disabled = true; b.textContent = 'rendering…';
   try {
     await exportFolderReady;
