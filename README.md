@@ -11,11 +11,11 @@ Needs [uv](https://docs.astral.sh/uv/); the first run installs Pillow, PyMuPDF, 
 
 ## Desktop apps
 
-Release downloads include `Collage.exe` for Windows and separate `Collage-macOS-AppleSilicon.zip` and `Collage-macOS-Intel.zip` archives for macOS 15 or later. On a Mac, unzip the matching archive and move `Collage.app` into Applications. Mac builds use ad-hoc signing and are not Apple-notarized; macOS may require approval in System Settings > Privacy & Security on first launch.
+Release downloads include `autocollage-0.1.4.exe` for Windows and separate `autocollage-0.1.4-macos-apple-silicon.zip` and `autocollage-0.1.4-macos-intel.zip` archives for macOS 15 or later. Future downloads include their release version in the same naming format. On a Mac, unzip the matching archive and move `Collage.app` into Applications. Mac builds use ad-hoc signing and are not Apple-notarized; macOS may require approval in System Settings > Privacy & Security on first launch.
 
 Run `uv run --extra desktop desktop.py` to open Collage in its own resizable window. This keeps the existing HTML interface and Python image engine, but does not open an external browser. Windows needs the Microsoft Edge WebView2 Runtime.
 
-GitHub Actions builds and tests the executable before publishing it to [Releases](https://github.com/diafanous/collage/releases). To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py` on Windows.
+GitHub Actions builds and tests the executable before publishing it to [Releases](https://github.com/diafanous/autocollage/releases). To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py` on Windows.
 
 Version 0.1.3 adds up to 16 layers, Ctrl+Z/Ctrl+Y edit history, a fixed sidebar header, export settings under the gear button, HEIC imports, and folder selection. Exports save to Downloads by default; choose another folder in settings to remember it. Existing exports receive numbered filenames rather than being overwritten.
 
