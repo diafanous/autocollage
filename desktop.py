@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import threading
@@ -80,6 +81,25 @@ def write_smoke_error(message: str | None = None) -> None:
         pass
 
 
+def configure_smoke_logging(webview) -> None:
+    log_path = os.environ.get("COLLAGE_WEBVIEW_LOG")
+    if not log_path:
+        return
+
+    path = Path(log_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+    logger = webview.logger
+    for handler in tuple(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+    handler = logging.FileHandler(path, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+
+
 def main() -> int:
     server = None
     server_thread = None
@@ -88,8 +108,12 @@ def main() -> int:
     try:
         # Keep optional desktop imports inside the handled startup path so a
         # missing WebView2/runtime dependency cannot produce a frozen-app dialog.
+        if smoke_test or server_smoke_test:
+            os.environ["PYWEBVIEW_LOG"] = "DEBUG"
         import webview
         from server import Handler, Server
+        if smoke_test or server_smoke_test:
+            configure_smoke_logging(webview)
 
         # Bind to an OS-assigned loopback port so this app can run alongside the
         # browser version or another desktop instance without port conflicts.

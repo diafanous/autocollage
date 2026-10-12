@@ -48,14 +48,18 @@ jobs:
         shell: pwsh
         run: |
           $smokeLog = Join-Path $env:RUNNER_TEMP "Collage-smoke.log"
+          $webviewLog = Join-Path $env:RUNNER_TEMP "Collage-webview.log"
           $env:COLLAGE_SMOKE_LOG = $smokeLog
+          $env:COLLAGE_WEBVIEW_LOG = $webviewLog
           $smoke = Start-Process -FilePath ".\dist\Collage.exe" -ArgumentList "--smoke-test" -PassThru
           if (-not $smoke.WaitForExit(90000)) {
             $smoke.Kill($true)
             $smoke.WaitForExit()
+            if (Test-Path $webviewLog) { Get-Content $webviewLog }
             if (Test-Path $smokeLog) { Get-Content $smokeLog }
             throw "Packaged desktop smoke test timed out after 90 seconds"
           }
+          if (Test-Path $webviewLog) { Get-Content $webviewLog }
           if (Test-Path $smokeLog) { Get-Content $smokeLog }
           if ($smoke.ExitCode -ne 0) { throw "Packaged desktop smoke test failed with exit code $($smoke.ExitCode)" }
 
