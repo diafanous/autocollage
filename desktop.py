@@ -31,10 +31,10 @@ def run_gui_smoke_test(url: str, webview) -> None:
         height=620,
     )
 
-    def on_loaded(loaded_window: webview.Window) -> None:
+    def on_loaded() -> None:
         try:
-            title = loaded_window.evaluate_js("document.title")
-            has_controls = loaded_window.evaluate_js(
+            title = window.evaluate_js("document.title")
+            has_controls = window.evaluate_js(
                 "['open', 'pick', 'go', 'unit'].every(id => document.getElementById(id))"
             )
             if str(title).strip().lower() != "collage" or not has_controls:
@@ -43,7 +43,7 @@ def run_gui_smoke_test(url: str, webview) -> None:
         except Exception as error:
             result["error"] = str(error)
         finally:
-            loaded_window.destroy()
+            window.destroy()
 
     def on_timeout() -> None:
         result["error"] = "desktop smoke test timed out waiting for the Collage page"
