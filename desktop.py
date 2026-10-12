@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import threading
+from urllib.request import urlopen
 
 import webview
 
@@ -18,6 +20,18 @@ def main() -> None:
     server_thread.start()
 
     try:
+        if "--smoke-test" in sys.argv[1:]:
+            # Exercise the packaged server and its bundled UI without opening
+            # a window. The release workflow runs this against the built EXE.
+            with urlopen(f"http://127.0.0.1:{port}/", timeout=10) as response:
+                page = response.read().decode("utf-8")
+                if response.status != 200 or "<!doctype html>" not in page.lower():
+                    raise RuntimeError("desktop smoke test could not load the bundled UI")
+            with urlopen(f"http://127.0.0.1:{port}/version", timeout=10) as response:
+                if response.status != 200 or not response.read():
+                    raise RuntimeError("desktop smoke test could not read the server version")
+            return
+
         webview.create_window(
             "Collage",
             f"http://127.0.0.1:{port}",
