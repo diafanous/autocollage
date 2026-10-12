@@ -9,6 +9,12 @@ uv run test_collage.py
 
 Needs [uv](https://docs.astral.sh/uv/); the first run creates the environment and installs the two dependencies (Pillow, PyMuPDF, listed in `pyproject.toml`). Python 3.10+. Everything runs locally; the server only listens on 127.0.0.1.
 
+## Windows desktop app
+
+Run `uv run --extra desktop desktop.py` to open Collage in its own resizable window. This keeps the existing HTML interface and Python image engine, but does not open an external browser. Windows needs the Microsoft Edge WebView2 Runtime.
+
+Windows release builds are created from version tags (`v*`) by GitHub Actions and attached to the repository's [Releases](https://github.com/diafanous/collage/releases) page as `Collage.exe`. Pull requests also build the executable and expose it as a workflow artifact. To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." desktop.py` on Windows.
+
 ## How it works
 
 1. **Source.** Add any number of images or PDFs (drag onto the window too). The physical size is read from the PDF page or the image's dpi tag. If an image has no dpi tag the size is assumed at 300 dpi and flagged; type the real width and the height follows. **Random from folder:** paste a folder path, say how many, press *pick*: that many random images/PDFs from the folder (not its sub-folders) replace the previous random pick; files you added yourself stay.
@@ -44,6 +50,7 @@ The preview is rendered by the same engine as the export, at screen size. Slider
 |---|---|
 | `collage.py` | engine: load, cut, layout, render, export |
 | `server.py` | local HTTP server, serves the UI and the font |
+| `desktop.py` | starts the local server in a standalone pywebview window |
 | `index.html` | the UI (no build step, no framework) |
 | `test_collage.py` | self-checks |
 | `fonts/` | linked folder holding `paper-mono-v1.0.zip`; the server reads the font straight from the zip. Not tracked by git. |

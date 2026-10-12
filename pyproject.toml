@@ -3,3 +3,9 @@ name = "collage"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = ["pillow>=10.1", "pymupdf>=1.24"]
+
+[project.optional-dependencies]
+desktop = ["pywebview>=6.0"]
+
+[dependency-groups]
+build = ["pyinstaller>=6.0"]
