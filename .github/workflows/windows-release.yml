@@ -3,6 +3,8 @@ name: Windows desktop build
 on:
   pull_request:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -12,9 +14,19 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version_tag: ${{ steps.project_version.outputs.tag }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read project version
+        id: project_version
+        shell: pwsh
+        run: |
+          $match = Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"'
+          if (-not $match) { throw "Could not read project version from pyproject.toml" }
+          "tag=v$($match.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
 
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
@@ -36,7 +48,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -51,11 +63,16 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ github.ref_type == 'tag' && github.ref_name || needs.build.outputs.version_tag }}
           REPOSITORY: ${{ github.repository }}
+          IS_MAIN_PUSH: ${{ github.ref == 'refs/heads/main' }}
         run: |
           if gh release view "$TAG_NAME" --repo "$REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --clobber
+            if [ "$IS_MAIN_PUSH" = "true" ]; then
+              echo "Release $TAG_NAME already exists; leaving it unchanged."
+            else
+              gh release upload "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --clobber
+            fi
           else
-            gh release create "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --generate-notes --title "Collage $TAG_NAME"
+            gh release create "$TAG_NAME" dist/Collage.exe --repo "$REPOSITORY" --target "$GITHUB_SHA" --generate-notes --title "Collage $TAG_NAME"
           fi

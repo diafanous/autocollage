@@ -13,7 +13,7 @@ Needs [uv](https://docs.astral.sh/uv/); the first run creates the environment an
 
 Run `uv run --extra desktop desktop.py` to open Collage in its own resizable window. This keeps the existing HTML interface and Python image engine, but does not open an external browser. Windows needs the Microsoft Edge WebView2 Runtime.
 
-Windows release builds are created from version tags (`v*`) by GitHub Actions and attached to the repository's [Releases](https://github.com/diafanous/collage/releases) page as `Collage.exe`. Pull requests also build the executable and expose it as a workflow artifact. To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." desktop.py` on Windows.
+GitHub Actions builds the executable for pull requests and makes it available as a workflow artifact. On the first main-branch build for a project version, and whenever a new `v*` tag is pushed, it publishes `Collage.exe` to the repository's [Releases](https://github.com/diafanous/collage/releases) page. To build locally, run `uv sync --extra desktop --group build`, then `uv run --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." desktop.py` on Windows.
 
 ## How it works
 
