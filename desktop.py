@@ -5,12 +5,9 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import traceback
 from pathlib import Path
 from urllib.request import urlopen
-
-import webview
-
-from server import Handler, Server
 
 
 def webview_storage_path() -> Path:
@@ -23,7 +20,7 @@ def webview_storage_path() -> Path:
     return path
 
 
-def run_gui_smoke_test(url: str) -> None:
+def run_gui_smoke_test(url: str, webview) -> None:
     """Exercise the packaged native window, WebView2 backend, and bundled UI."""
     result: dict[str, str | None] = {"error": None, "title": None}
     window = webview.create_window(
@@ -49,7 +46,11 @@ def run_gui_smoke_test(url: str) -> None:
 
     def on_timeout() -> None:
         result["error"] = "desktop smoke test timed out waiting for the Collage page"
-        window.destroy()
+        write_smoke_error(result["error"])
+        try:
+            window.destroy()
+        except Exception as error:
+            write_smoke_error(f"{result['error']}\nCould not close the test window: {error}")
 
     window.events.loaded += on_loaded
     timeout = threading.Timer(45, on_timeout)
@@ -66,18 +67,38 @@ def run_gui_smoke_test(url: str) -> None:
         raise RuntimeError("desktop smoke test closed before the Collage page loaded")
 
 
-def main() -> None:
-    # Bind to an OS-assigned loopback port so this app can run alongside the
-    # browser version or another desktop instance without port conflicts.
-    server = Server(("127.0.0.1", 0), Handler)
-    port = server.server_address[1]
-    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-    server_thread.start()
-
+def write_smoke_error(message: str | None = None) -> None:
+    log_path = os.environ.get("COLLAGE_SMOKE_LOG")
+    if not log_path:
+        temp_dir = Path(os.environ.get("TEMP", Path.home() / "AppData" / "Local" / "Temp"))
+        log_path = str(temp_dir / "Collage-smoke-error.log")
     try:
-        if "--smoke-test" in sys.argv[1:] or "--server-smoke-test" in sys.argv[1:]:
-            # Exercise the packaged server, native WebView2 window, and UI.
-            # The release workflow runs this against the built EXE.
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        detail = message if message is not None else traceback.format_exc()
+        Path(log_path).write_text(detail, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def main() -> int:
+    server = None
+    server_thread = None
+    smoke_test = "--smoke-test" in sys.argv[1:]
+    server_smoke_test = "--server-smoke-test" in sys.argv[1:]
+    try:
+        # Keep optional desktop imports inside the handled startup path so a
+        # missing WebView2/runtime dependency cannot produce a frozen-app dialog.
+        import webview
+        from server import Handler, Server
+
+        # Bind to an OS-assigned loopback port so this app can run alongside the
+        # browser version or another desktop instance without port conflicts.
+        server = Server(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+
+        if smoke_test or server_smoke_test:
             with urlopen(f"http://127.0.0.1:{port}/", timeout=10) as response:
                 page = response.read().decode("utf-8")
                 if response.status != 200 or "<!doctype html>" not in page.lower():
@@ -85,12 +106,9 @@ def main() -> None:
             with urlopen(f"http://127.0.0.1:{port}/version", timeout=10) as response:
                 if response.status != 200 or not response.read():
                     raise RuntimeError("desktop smoke test could not read the server version")
-            if "--smoke-test" in sys.argv[1:]:
-                run_gui_smoke_test(f"http://127.0.0.1:{port}")
-                print("Packaged desktop smoke test passed.")
-            else:
-                print("Packaged server smoke test passed.")
-            return
+            if smoke_test:
+                run_gui_smoke_test(f"http://127.0.0.1:{port}", webview)
+            return 0
 
         webview.create_window(
             "Collage",
@@ -100,12 +118,29 @@ def main() -> None:
             min_size=(840, 620),
         )
         webview.start(storage_path=str(webview_storage_path()))
+        return 0
+    except Exception as error:
+        if smoke_test or server_smoke_test:
+            write_smoke_error()
+            return 1
+
+        message = f"Collage could not start.\n\n{error}"
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(0, message, "Collage", 0x10)
+        except Exception:
+            pass
+        return 1
     finally:
-        server.shutdown()
-        server.server_close()
-        server_thread.join(timeout=2)
+        if server:
+            if server_thread and server_thread.is_alive():
+                server.shutdown()
+            server.server_close()
+            if server_thread:
+                server_thread.join(timeout=2)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
 

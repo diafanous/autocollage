@@ -42,12 +42,21 @@ jobs:
         run: uv run --locked python test_collage.py
 
       - name: Build Collage.exe
-        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." desktop.py
+        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --exclude-module PIL._imagingft desktop.py
 
       - name: Smoke-test packaged executable
         shell: pwsh
         run: |
-          $smoke = Start-Process -FilePath ".\dist\Collage.exe" -ArgumentList "--smoke-test" -Wait -PassThru
+          $smokeLog = Join-Path $env:RUNNER_TEMP "Collage-smoke.log"
+          $env:COLLAGE_SMOKE_LOG = $smokeLog
+          $smoke = Start-Process -FilePath ".\dist\Collage.exe" -ArgumentList "--smoke-test" -PassThru
+          if (-not $smoke.WaitForExit(90000)) {
+            $smoke.Kill($true)
+            $smoke.WaitForExit()
+            if (Test-Path $smokeLog) { Get-Content $smokeLog }
+            throw "Packaged desktop smoke test timed out after 90 seconds"
+          }
+          if (Test-Path $smokeLog) { Get-Content $smokeLog }
           if ($smoke.ExitCode -ne 0) { throw "Packaged desktop smoke test failed with exit code $($smoke.ExitCode)" }
 
       - name: Upload executable
