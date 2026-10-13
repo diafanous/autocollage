@@ -1,6 +1,6 @@
 # Physical Connector Project Setup Implementation Plan
 
-> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task after the user approves the plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task after the user approves the plan. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add clear Codex instructions and an approved design spec to `diafanous/autocollage`, then create topic branches based on `physical-connector`.
 
@@ -40,9 +40,9 @@
 - Consumes: the user-approved design for the projected AutoCollage experience, hardware, budget, reuse goal, phases, and branch layout.
 - Produces: a design spec recording intent, goals, non-goals, constraints, approved calls, and remaining builder choices; a root Codex instruction file that points to and operationalizes the spec.
 
-- [ ] **Step 1: Write the design spec** with the first-release deliverables, current release baseline, available equipment, exact US$30 landed-cost rule, USB serial architecture, physical-control assumptions, adaptable app profiles, branch names, and Phase 2 boundary.
-- [ ] **Step 2: Write root `AGENTS.md`** instructing Codex to read the spec, recheck the latest Windows release, keep the first release scoped, source and price every required component, avoid coordinate-based automation, and document/verify the enclosure and controller build.
-- [ ] **Step 3: Fetch both files from `physical-connector`** and confirm they exist as UTF-8 text and preserve every global constraint above.
+- [x] **Step 1: Write the design spec** with the first-release deliverables, current release baseline, available equipment, exact US$30 landed-cost rule, USB serial architecture, physical-control assumptions, adaptable app profiles, branch names, and Phase 2 boundary.
+- [x] **Step 2: Write root `AGENTS.md`** instructing Codex to read the spec, recheck the latest Windows release, keep the first release scoped, source and price every required component, avoid coordinate-based automation, and document/verify the enclosure and controller build.
+- [x] **Step 3: Fetch both files from `physical-connector`** and confirm they exist as UTF-8 text and preserve every global constraint above.
 
 No software tests are applicable to Markdown-only changes; verify the saved file contents directly.
 
@@ -55,6 +55,6 @@ No software tests are applicable to Markdown-only changes; verify the saved file
 - Consumes: the updated head of `physical-connector` after Task 1.
 - Produces: five topic branches that start at the umbrella branch and can evolve independently.
 
-- [ ] **Step 1: Check for existing topic refs** before creation; never move or overwrite an existing ref.
-- [ ] **Step 2: Create missing branches from `physical-connector`:** `physical-connector-enclosure`, `physical-connector-firmware`, `physical-connector-autocollage-adapter`, `physical-connector-bom-docs`, and `physical-connector-phase2-vision-pen`.
-- [ ] **Step 3: Fetch the branch refs** and confirm all five exist; report the parent and topic branch links without creating a pull request or merging anything.
+- [x] **Step 1: Check for existing topic refs** before creation; never move or overwrite an existing ref.
+- [x] **Step 2: Create missing branches from `physical-connector`:** `physical-connector-enclosure`, `physical-connector-firmware`, `physical-connector-autocollage-adapter`, `physical-connector-bom-docs`, and `physical-connector-phase2-vision-pen`.
+- [x] **Step 3: Fetch the branch refs** and confirm all five exist; report the parent and topic branch links without creating a pull request or merging anything.
