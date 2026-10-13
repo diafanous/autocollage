@@ -18,7 +18,7 @@ The controls should feel discoverable and inviting. They should communicate that
 - Keep parameter changes visible in the projected composition with responsive feedback.
 - Make the controller reusable with other applications through replaceable, declarative app profiles and a stable controller-to-host protocol.
 - Use the existing laptop, Epson 4855 projector, USB webcam, A1 mini and P1S printers, white and black PLA, translucent PETG, and available woodshop as existing resources. Place the projector in an open bay beneath the controller. Include any newly purchased materials and hardware for the controller and projector bay in the US$30 cap; the user-provided projector and free supporting table/platform are not purchases for this budget.
-- Keep the purchase cost of every item required to build the first release at or below US$30 total, including shipping and tax.
+- Keep the delivered purchase cost of the controller and open projector bay strictly below US$40 total, including shipping and tax, for delivery to Brooklyn, NY.
 
 ## First-release scope
 
@@ -51,9 +51,9 @@ Use a direct app-side bridge or supported extension point. Do not use mouse move
 
 ## Cost and sourcing rule
 
-US$30 is an absolute landed-cost ceiling for the tactile controller and its projector bay, including all newly required purchased components and materials, shipping, and tax. Include a USB-C-to-USB-C data cable if the user cannot reuse one. The Epson 4855 projector is already owned, and the supporting table/platform is free; do not include their purchase cost. The existing laptop, webcam, printers, filament, and woodshop may also be treated as already-owned resources; do not add their purchase cost.
+The complete controller and open projector bay must cost less than US$40 delivered to Brooklyn, NY. Include every newly required purchased component and material, shipping, and tax. Amazon may be used; assume the user has Prime, but count free shipping only for listings that are actually Prime-eligible for delivery to Brooklyn. Include the destination's checkout tax. Include a USB-C-to-USB-C data cable if the user cannot reuse one. The Epson 4855 projector is already owned, and the supporting table/platform is free; do not include their purchase cost. The existing laptop, webcam, printers, filament, and woodshop may also be treated as already-owned resources; do not add their purchase cost.
 
-Before declaring the BOM compliant, obtain a current quote for every required purchased item and calculate the delivered total for the user's shipping region. If a shipping region is unavailable, leave the BOM explicitly unverified and require a quoted all-in total at or below US$30 before locking component choices. Do not hide shipping, tax, small hardware, cable, or connectors outside the total. If the total exceeds the cap, revise the design or present a compliant alternative; never describe an over-budget design as meeting the limit.
+Before declaring the BOM compliant, obtain a current quote for every required purchased item and calculate the delivered total for Brooklyn, NY. If listing eligibility, shipping, or tax cannot be confirmed, leave the BOM explicitly estimated/unverified and require a confirmed all-in total below US$40 before locking component choices. Exactly US$40 does not meet the cap. Do not hide shipping, tax, small hardware, cable, or projector-bay materials outside the total. If the total reaches or exceeds the cap, revise the design or present a compliant alternative; never describe an over-budget design as meeting the limit.
 
 ## Physical design and materials
 
@@ -90,6 +90,6 @@ The first release is ready for a build review when:
 - Switching banks does not cause unintended jumps; normal GUI edits remain usable.
 - The protocol and profile boundary make an additional application profile feasible without changing enclosure mechanics or firmware identities.
 - Windows setup is based on the latest stable AutoCollage Windows release and verified runtime requirements.
-- The BOM's quoted total for the controller and projector bay, including all required purchased parts/materials, shipping, and tax, is at or below US$30; otherwise the design is not marked budget-compliant.
+- The quoted delivered total for the controller and projector bay, including all required purchased parts/materials, shipping, and tax to Brooklyn, NY, is below US$40; otherwise the design is not marked budget-compliant.
 - The projector bay fits the measured Epson 4855 unit, supports the controller independently, and preserves the manual's required airflow clearance and the projection path.
 - Phase 2 remains deferred and separately scoped.
