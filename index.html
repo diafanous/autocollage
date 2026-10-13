@@ -3,15 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>collage</title>
+<title>morphaic</title>
 <style>
 @font-face{font-family:"Paper Mono";font-weight:400;src:url(/font/Regular.woff2) format("woff2")}
 @font-face{font-family:"Paper Mono";font-weight:500;src:url(/font/Medium.woff2) format("woff2")}
-:root{--bg:#0c0c0d;--panel:#101012;--stage:#09090a;--line:#242428;--fg:#ececea;--dim:#86868c}
-@media (prefers-color-scheme:light){:root{--bg:#f4f3ef;--panel:#faf9f6;--stage:#e9e8e3;--line:#dedcd5;--fg:#18181b;--dim:#7a7a80}}
+:root{color-scheme:dark;--bg:#0c0c0d;--panel:#101012;--stage:#09090a;--line:#242428;--fg:#ececea;--dim:#86868c;--scroll:#46464c}
+@media (prefers-color-scheme:light){:root{color-scheme:light;--bg:#f4f3ef;--panel:#faf9f6;--stage:#e9e8e3;--line:#dedcd5;--fg:#18181b;--dim:#7a7a80;--scroll:#b4b1a7}}
 *{box-sizing:border-box;margin:0}
 [hidden]{display:none!important}
 html,body{height:100%}
+html,body{overflow:hidden}
+*{scrollbar-width:thin;scrollbar-color:var(--scroll) var(--panel)}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:var(--scroll);border:2px solid var(--panel);border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 body{background:var(--bg);color:var(--fg);font:12px/1.5 "Paper Mono",ui-monospace,Consolas,monospace;display:grid;grid-template-columns:1fr 380px;overflow:hidden}
 body.drag #stage{outline:1px dashed var(--fg);outline-offset:-14px}
 
@@ -32,8 +38,10 @@ header select,header strong,header button{flex-shrink:0}
 header #ms{min-width:0;overflow:hidden;text-overflow:ellipsis}
 header button{font-size:17px;line-height:1}
 header button:disabled{opacity:.35;cursor:default}
+#settings{display:flex;align-items:center;justify-content:center}
+#settings svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 header #go{display:inline-block;white-space:nowrap;margin:0;padding:4px 7px;font-size:12px;min-width:0;max-width:124px;flex-shrink:1;overflow:hidden;text-overflow:ellipsis}
-#sideScroll,#settingsPanel{flex:1;min-height:0;overflow:auto;padding-bottom:24px}
+#sideScroll,#settingsPanel{flex:1;min-height:0;overflow:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:14px;padding-bottom:24px}
 #settingsPanel{padding-top:16px}
 #settingsPanel h2 button{color:var(--fg)}
 #motionDialog{margin:auto;background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:18px;max-width:90vw;max-height:90vh}
@@ -42,6 +50,14 @@ header #go{display:inline-block;white-space:nowrap;margin:0;padding:4px 7px;font
 section{border-top:1px solid var(--line);padding:16px 0 6px}
 h2{font:inherit;color:var(--dim);display:flex;justify-content:space-between;margin-bottom:12px}
 h2 em{font-style:normal}
+.panel-disclosure>summary{display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;color:var(--dim)}
+.panel-disclosure>summary::-webkit-details-marker{display:none}
+.panel-disclosure>summary::after{content:'';width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg);margin-right:3px;flex-shrink:0}
+.panel-disclosure[open]>summary::after{transform:rotate(45deg)}
+.panel-disclosure[open]>summary{margin-bottom:12px}
+.panel-disclosure>summary h2{flex:1;margin-bottom:0}
+.panel-disclosure>summary:hover{color:var(--fg)}
+.panel-disclosure>summary:hover h2{color:inherit}
 
 button{all:unset;cursor:pointer;color:var(--dim)}
 button:hover:not(:disabled){color:var(--fg)}
@@ -90,6 +106,8 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
 .file .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file .row{margin:4px 0 0}
 .file input[type=number]{width:56px;text-align:left}
+.file input[aria-label=page]{width:36px}
+.file select{flex-shrink:0}
 .file .tag{color:var(--dim);margin-top:2px}
 .file .tag.warn{color:var(--fg)}
 .file .tag.warn::before{content:"! "}
@@ -101,6 +119,82 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
 #go:disabled{opacity:.4;cursor:progress}
 #px{color:var(--dim);margin-bottom:14px}
 #px.warn{color:var(--fg)}
+.studio-dialog{margin:auto;background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:20px;width:min(900px,94vw);max-height:94vh;overflow:auto}
+.studio-dialog::backdrop{background:#000b}
+.studio-dialog canvas{display:block;width:100%;touch-action:none}
+#reliefCanvas{height:55vh;min-height:260px;background:#181b1c;cursor:grab}
+#reliefCanvas:active{cursor:grabbing}
+#reliefDialog{position:fixed;top:20px;left:20px;margin:0;width:min(900px,calc(100vw - 420px));z-index:10}
+#reliefTitlebar{position:sticky;top:-20px;background:var(--panel);z-index:2;cursor:move;touch-action:none;user-select:none;align-items:center;gap:12px;flex-wrap:wrap;margin:-20px -20px 16px;padding:12px 20px;border-bottom:1px solid var(--line)}
+#reliefMoveHandle{cursor:move}
+.viewer-actions{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.viewer-actions button{border:1px solid var(--line);padding:3px 7px;cursor:pointer;color:var(--fg)}
+#cleatOptions{border-left:1px solid var(--line);padding-left:12px;margin:0 0 18px}
+#cleatOptions summary{color:var(--dim);cursor:pointer;margin-bottom:14px}
+#cleatOptions[open] summary{color:var(--fg)}
+#screwControl{row-gap:5px}
+.step-ticks{grid-column:1/-1;display:flex;justify-content:space-between;padding:0 5px;color:var(--dim);font-size:9px;line-height:1.2}
+.step-ticks span{position:relative;width:1px;text-align:center;padding-top:8px}
+.step-ticks span::before{content:'';position:absolute;top:0;left:0;height:5px;width:1px;background:var(--dim)}
+.share-lock{width:18px;text-align:center;font-size:13px;flex-shrink:0}
+.share-lock[aria-pressed=true]{color:var(--fg)}
+#shapeShares input:disabled{opacity:.35;cursor:default}
+@media(max-width:760px){#reliefDialog{width:calc(100vw - 40px);max-height:50vh}#reliefCanvas{height:28vh;min-height:120px}}
+#knifeCanvas{height:min(55vh,520px);background:#183c36;cursor:crosshair}
+.studio-dialog h2{color:var(--fg)}
+.studio-dialog .note{margin:10px 0}
+.studio-dialog footer{display:flex;align-items:center;gap:18px;margin-top:16px;flex-wrap:wrap}
+.studio-dialog footer button{border:1px solid var(--line);padding:7px 12px;color:var(--fg)}
+.studio-dialog footer button:disabled{opacity:.35;cursor:default}
+#knifeUse{background:#eacb80;color:#24241c;border-color:#eacb80}
+#knifeStatus{flex:1;color:#eacb80}
+#shapeChart{display:block;width:256px;height:256px;max-width:100%;margin:8px auto 18px}
+#shapeLegend{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-bottom:14px}
+#cutTotal{text-align:right;color:var(--dim);margin-top:-8px}
+#lumSize{gap:5px;flex-wrap:nowrap}
+#lumSize input{width:64px;flex:1}
+#lumSize label,#lumSize span{color:var(--dim)}
+#stencilName{flex:1;width:100%}
+#knifeOpen,#lumDemo{border:1px solid var(--line);color:var(--fg);padding:6px 10px}
+#knifeOpen:hover,#lumDemo:hover{background:var(--fg);color:var(--bg)}
+#knifeOpen,#stencilLibraryToggle{border:1px solid var(--fg);padding:6px 10px;color:var(--fg);white-space:nowrap}
+#stencilLibraryToggle:hover{background:var(--fg);color:var(--bg)}
+#cutTools{gap:10px}
+.stencil-library-wrap{position:relative;margin-left:auto}
+#stencilLibrary{position:absolute;right:0;top:calc(100% + 8px);width:260px;max-width:calc(100vw - 60px);max-height:220px;overflow:auto;padding:6px;background:var(--panel);border:1px solid var(--fg);box-shadow:0 8px 30px #0006;z-index:4}
+#stencilLibrary button{display:block;box-sizing:border-box;width:100%;padding:7px 8px;text-align:left;color:var(--dim);overflow-wrap:anywhere}
+#stencilLibrary button:hover,#stencilLibrary button:focus-visible{background:var(--line);color:var(--fg)}
+#stencilLibrary button[aria-checked=true]{color:var(--fg)}
+#stencilLibrary button[aria-checked=true]::before{content:'✓ ';}
+#stencilLibrary .note{margin:4px 8px}
+#knifeTopbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;white-space:nowrap}
+#knifeTopbar h2{margin:0 auto 0 0;flex-shrink:0}
+#knifeTopbar button,#knifeTopbar summary{border:1px solid var(--line);padding:4px 6px;color:var(--dim);cursor:pointer}
+#knifeTopbar button.on{color:var(--fg);border-color:var(--dim)}
+#knifeTopbar button:disabled{opacity:.35;cursor:default}
+#knifeTopbar button:hover:not(:disabled),#knifeTopbar summary:hover{color:var(--fg)}
+#knifeTopbar details{position:relative;flex-shrink:0}
+#knifeTopbar summary{list-style:none}
+#knifeTopbar summary::-webkit-details-marker{display:none}
+#knifeTopbar details[open] summary{color:var(--fg);border-color:var(--dim)}
+.knife-menu-panel{position:absolute;right:0;top:calc(100% + 8px);width:min(360px,75vw);padding:16px;background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 30px #0006;white-space:normal;z-index:3}
+.knife-menu-panel .row:last-child,.knife-menu-panel .note:last-child{margin-bottom:0}
+#knifeSettings #knifeStatus{display:block;margin-top:14px}
+#knifeSettings #stencilSaveRow{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:14px}
+#knifeSettings .knife-menu-panel{max-height:65vh;overflow:auto}
+#knifeSound{display:flex;align-items:center;justify-content:center}
+#knifeSound svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#knifeDialog footer{justify-content:flex-end;margin-top:12px}
+@media(max-width:900px){#knifeTopbar{gap:4px;font-size:10px}#knifeTopbar button,#knifeTopbar summary{padding:4px}}
+#stencilSave{border:1px solid var(--line);padding:3px 8px;color:var(--fg)}
+#stencilSave:disabled{opacity:.4;cursor:default}
+#shapeLegend{font-size:11px;color:var(--dim);flex:1}
+#shapeLegend div{display:flex;gap:6px;justify-content:space-between}
+.swatch{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+#shapeShares .row{margin-bottom:8px}
+#shapeShares input[type=range]{flex:1;width:auto}
+#shapeShares input[type=number]{width:42px}
+.studio-dialog .seg{gap:18px;flex-wrap:wrap}
 @media (max-width:760px){body{grid-template-columns:1fr;grid-template-rows:55vh 1fr}aside{border-left:0;border-top:1px solid var(--line)}}
 </style>
 </head>
@@ -117,38 +211,46 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
 </main>
 <aside>
   <header>
-    <strong>collage</strong><span id="ms"></span>
+    <strong id="panelTitle">morphaic</strong><span id="ms"></span>
     <button id="undo" aria-label="undo" title="Undo (Ctrl+Z)" disabled>↶</button>
     <button id="redo" aria-label="redo" title="Redo (Ctrl+Y)" disabled>↷</button>
     <button id="go" title="Export the current collage"></button>
-    <button id="settings" aria-label="export settings" title="Export settings" aria-expanded="false">⚙</button>
-    <select id="unit" aria-label="units"><option>in</option><option>cm</option><option>mm</option></select>
+    <button id="settings" aria-label="export settings" title="Export settings" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8h14v-8"/></svg></button>
   </header>
   <div id="sideScroll">
   <section>
     <h2>source</h2>
     <div id="files"></div>
+    <div class="row" id="sourceUnitsRow"><span class="grow">page size</span><select id="unit" aria-label="units"><option>in</option><option>cm</option><option>mm</option></select></div>
     <div class="row"><button id="add">+ add image / pdf</button></div>
     <div class="row"><button id="folderbtn" aria-label="select folder" title="Select a folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></button><button id="fselect">select</button><span id="foldername" class="grow" hidden></span></div>
     <div class="row" id="folderPath" hidden><input id="fpath" placeholder="folder path" aria-label="folder path"><button id="fconfirm">select</button></div>
     <div class="row" id="folderCount" hidden><label for="fn" class="grow">number of files</label><input id="fn" type="number" min="1" max="50" value="3" aria-label="how many files"><button id="fgo">add files</button></div>
     <input id="pick" type="file" multiple accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,application/pdf" hidden>
   </section>
-  <section><h2>cut <em id="cutinfo"></em></h2><div id="sl-cut"></div>
+  <section><details id="cutDisclosure" class="panel-disclosure" open><summary aria-label="cut settings"><h2>cut <em id="cutinfo"></em></h2></summary><div id="sl-cut"></div>
     <div class="row"><span class="grow">section size</span><input id="cwv" type="number" step="any" aria-label="section width"><span>×</span><input id="chv" type="number" step="any" aria-label="section height"><span id="cu"></span></div>
+    <div class="row" id="cutTotal" role="status"><span class="grow"></span><span id="cutTotalText">0 total cuts</span></div>
+    <div class="row"><label for="cutShape" class="grow">cut shape</label><select id="cutShape" aria-label="cut shape"></select></div>
+    <div class="row"><label><input id="multiShape" type="checkbox">mix multiple shapes</label></div>
+    <div id="shapeMix" hidden><div id="shapeShares"></div><canvas id="shapeChart" width="512" height="512" aria-label="cut shape percentages"></canvas><div id="shapeLegend" aria-live="polite"></div></div>
+    <div class="row" id="cutTools"><button id="knifeOpen">cutting mat</button><div class="stencil-library-wrap"><button id="stencilLibraryToggle" aria-haspopup="menu" aria-expanded="false" aria-controls="stencilLibrary">saved stencils</button><div id="stencilLibrary" role="menu" aria-label="saved stencils" hidden></div></div></div>
+  </details>
   </section>
-  <section><h2>collage</h2><div id="sl-collage"></div></section>
+  <section><details id="collageDisclosure" class="panel-disclosure" open><summary aria-label="collage settings"><h2>collage</h2></summary><div id="sl-collage"></div></details></section>
   <section>
     <h2>guides <em>draw and grid buttons are on the preview</em></h2><div id="sl-guides"></div>
   </section>
   <section>
-    <h2>tone</h2><div id="sl-tone"></div>
+    <details id="toneDisclosure" class="panel-disclosure" open><summary aria-label="tone settings"><h2>tone</h2></summary><div id="sl-tone"></div>
     <canvas id="curve" width="440" height="440" aria-label="tone curve: click to add a point, drag to move, double-click a point to remove"></canvas>
     <div class="row"><span class="grow">curve</span><button id="curvereset">reset</button></div>
+    </details>
   </section>
   <section>
-    <h2>layers</h2><div id="sl-layers"></div>
+    <details id="layersDisclosure" class="panel-disclosure" open><summary aria-label="layer settings"><h2>layers</h2></summary><div id="sl-layers"></div>
     <div class="row"><span>seed</span><button id="seed">↻ <span id="seedn"></span></button><span class="grow"></span><span>paper</span><input id="bg" type="color" aria-label="background colour"></div>
+    </details>
   </section>
   </div>
   <div id="settingsPanel" hidden>
@@ -156,9 +258,11 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
     <h2>export settings <button id="closeSettings">done</button></h2>
     <div class="row"><span>export folder</span></div>
     <div class="row"><input id="exportfolder" aria-label="export folder" placeholder="Downloads"><button id="exportbrowse" aria-label="choose export folder" title="Choose export folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></button></div>
+    <div class="row"><span class="grow">exports</span><div class="seg" id="exportMode"><button data-mode="2d" class="on">2D</button><button data-mode="3d">3D</button></div></div>
+    <div id="output2d">
     <div class="row"><span class="grow">size</span><input id="ow" type="number" step="any" aria-label="output width"><span>×</span><input id="oh" type="number" step="any" aria-label="output height"><span id="ou"></span></div>
-    <div class="row"><span class="grow">dpi</span><input id="dpi" type="number" min="10" max="1200" list="dpis" aria-label="dpi"><datalist id="dpis"><option>72<option>150<option>300<option>600<option>1200</datalist></div>
     <div class="row"><span class="grow">file</span><div class="seg" id="fmt"><button data-f="png" class="on">png</button><button data-f="tif">tif</button><button data-f="pdf">pdf</button><button data-f="gif" title="animated process from source to finished collage">gif</button><button data-f="mp4" title="video of the collage process">mp4</button><button data-f="map" title="vector pdf of how every section moved">map</button><button data-f="triptych" title="PNG of original, collage and migration map side by side">triptych</button><button data-f="txt" title="Plain text of slider settings, tone curve, drawing and map alterations">txt</button></div></div>
+    <div class="row"><span class="grow">luminosity map</span><div class="seg" id="lum2d"><button data-f="lum-png">png</button><button data-f="lum-tif">tif</button></div></div>
     <div id="animsec" hidden>
       <div class="sl"><span>smoothness</span><output id="smoothnessv">12</output><input id="smoothness" type="range" min="4" max="24" step="1" value="12" aria-label="animation smoothness"></div>
       <div class="sl"><span>pace</span><output id="pacev">12 seconds</output><input id="pace" type="range" min="3" max="30" step="1" value="12" aria-label="animation duration"></div>
@@ -169,6 +273,7 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
     <div id="mapsec" hidden>
       <div class="row"><span class="grow">start node</span><select id="node_start" aria-label="migration start node"><option value="none">none</option><option value="dot" selected>dot</option><option value="ring">ring</option><option value="square">square</option></select></div>
       <div class="row"><span class="grow">end node</span><select id="node_end" aria-label="migration end node"><option value="none">none</option><option value="arrow" selected>arrow</option><option value="dot">dot</option><option value="ring">ring</option><option value="square">square</option></select></div>
+      <div class="row"><label><input id="nodeByShape" type="checkbox">end nodes by cut shape</label></div><div id="shapeNodes" hidden></div>
       <div class="sl"><span>end node size</span><output id="node_end_sizev">1.00×</output><input id="node_end_size" type="range" min="0.25" max="6" step="0.05" value="1" aria-label="migration end node size"></div>
       <div class="row"><button id="saveMapDefaults">save map settings as default</button></div>
       <div class="row"><b>1 initial</b></div>
@@ -182,11 +287,59 @@ button.tgl.on{color:var(--fg);box-shadow:0 1px 0 var(--fg)}
       <div class="row"><span class="grow">paper / opacity</span><input type="color" id="m3p" aria-label="final paper colour"><input type="range" id="m3a" min="0" max="1" step=".01" aria-label="final paper opacity"></div>
       <div class="note">downloads a zip: the three layers as separate vector pdfs (each with its own paper, paper opacity 0 = none) to print and stack, plus one pdf holding all three as layers. the stage shows them stacked.</div>
     </div>
+    </div>
+    <div id="output3d" hidden>
+      <div class="row"><span class="grow">model</span><div class="seg" id="lum3d"><button data-format="stl" class="on">stl</button><button data-format="3dm">3dm</button></div></div>
+      <div class="row" id="stlEncodingRow"><label for="stlEncoding" class="grow">STL encoding</label><select id="stlEncoding"><option value="binary">binary</option><option value="ascii">ASCII</option></select></div>
+    </div>
+    <div class="row" id="dpiRow"><span class="grow">dpi</span><input id="dpi" type="number" min="10" max="1200" list="dpis" aria-label="dpi"><datalist id="dpis"><option>72<option>150<option>300<option>600<option>1200</datalist></div>
+    <div id="lumControls" hidden>
+      <h2>relief <button id="reliefOpen">◇ live 3D viewer</button></h2>
+      <div class="row"><label for="lumSource" class="grow">generate from</label><select id="lumSource"><option value="collage">current collage</option><option value="import">imported image</option></select></div>
+      <div id="lumImportRow" hidden><div class="row"><button id="lumImport">+ import image</button><span id="lumImportName" class="grow"></span></div><input id="lumPick" type="file" accept="image/*,.heic,.heif,.tif,.tiff" hidden></div>
+      <div class="row" id="lumSize"><label for="lumWidth">W</label><input id="lumWidth" type="number" min="0.04" step="any" aria-label="3D width"><span class="lum-size-unit">in</span><span>×</span><label for="lumHeight">H</label><input id="lumHeight" type="number" min="0.04" step="any" aria-label="3D height"><span class="lum-size-unit">in</span></div>
+      <div class="row"><button id="lumDemo">try a demo relief</button></div>
+      <div id="lumSliders"></div>
+      <div class="row"><label><input id="lumInvert" type="checkbox">invert luminosity</label></div>
+      <div id="mountControls" data-model-only>
+        <h2>backing & wall mount</h2>
+        <div class="row"><label><input id="cleatEnabled" type="checkbox">French cleat backing</label></div>
+        <details id="cleatOptions" hidden>
+          <summary>French cleat options</summary>
+          <div class="row"><label><input id="showCleatPreview" type="checkbox" checked>show cleat in live viewer</label></div>
+          <div class="row"><label for="cleatHardware" class="grow">wall hardware</label><select id="cleatHardware"><option value="t-pins">T-pins</option><option value="plastic-pins">clear plastic pins</option><option value="screws" selected>screws</option></select></div>
+          <div id="screwControl" class="sl"><label for="screwSize">screw shank diameter</label><output id="screwSizeValue">3/16 in</output><input id="screwSize" type="range" min="1" max="8" step="1" value="3" list="screwSteps" aria-label="screw diameter in sixteenths of an inch"><datalist id="screwSteps"><option value="1"><option value="2"><option value="3"><option value="4"><option value="5"><option value="6"><option value="7"><option value="8"></datalist><div class="step-ticks" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div></div>
+          <div class="row" id="pinControl" hidden><label class="grow" for="pinDiameter">pin shaft diameter (mm)</label><input id="pinDiameter" type="number" min=".5" max="6" step=".1" value="1"></div>
+          <div class="row"><label for="holeClearance" class="grow">hole clearance (mm)</label><input id="holeClearance" type="number" min="0" max="1" step=".05" value=".3"></div>
+          <div class="row"><label for="cleatHeight" class="grow">minimum rail height (mm)</label><input id="cleatHeight" type="number" min="8" max="100" step="1" value="14"></div>
+          <div class="row"><label for="cleatDepth" class="grow">rail depth (mm)</label><input id="cleatDepth" type="number" min="2" max="20" step=".5" value="5"></div>
+          <div class="row"><label for="cleatGap" class="grow">bevel clearance (mm)</label><input id="cleatGap" type="number" min=".1" max="1" step=".05" value=".3"></div>
+          <div class="row"><label><input id="includeWallCleat" type="checkbox" checked>include matching wall cleat</label></div>
+          <div class="row"><label><input id="hollowBack" type="checkbox">lighten with rear pocket</label></div>
+          <div class="row" id="shellControl" hidden><label class="grow" for="shellThickness">rear shell thickness (mm)</label><input id="shellThickness" type="number" min=".5" max="5" step=".1" value="1"></div>
+          <div class="note">45° mating rails · hardware fits the separate wall cleat · set holes to match your hardware · rail height grows to fit head clearance</div>
+          <div class="note">matching wall cleat exports beside the relief as a separate part</div>
+        </details>
+      </div>
+    </div>
     <div id="px"></div>
   </section>
   </div>
 </aside>
 <dialog id="motionDialog" aria-label="animation preview"><h2>process preview <button id="motionClose">close</button></h2><img id="gifPreview" alt="collage process animation" hidden><video id="mp4Preview" controls loop playsinline hidden></video></dialog>
+<dialog id="reliefDialog" class="studio-dialog" aria-label="live luminosity relief viewer"><h2 id="reliefTitlebar"><span id="reliefMoveHandle" role="button" tabindex="0" aria-label="move relief viewer" title="Drag to move; arrow keys move the focused title">luminosity relief</span><span class="viewer-actions"><button id="reliefRefresh">refresh</button><button id="reliefReset">reset view</button><button id="reliefBack">back view</button><button id="reliefClose">close</button></span></h2><canvas id="reliefCanvas" aria-label="3D relief: drag to rotate, scroll to zoom"></canvas><div class="note">drag to orbit · scroll to zoom · preview uses a lighter mesh; exports use your quality setting</div><div class="row"><label><input id="reliefLive" type="checkbox" checked>live updates</label><span class="grow" id="reliefStatus" role="status"></span></div></dialog>
+<dialog id="knifeDialog" class="studio-dialog" aria-label="knife sketch cutting mat">
+  <div id="knifeTopbar" role="toolbar" aria-label="cutting mat controls">
+    <h2>the cutting mat</h2>
+    <button id="knifeFree" class="on">freehand knife</button><button id="knifePrecision">point-to-point cuts</button>
+    <button id="knifeUndo" aria-label="undo cut" title="Undo cut (Ctrl+Z)" disabled>↶</button><button id="knifeRedo" aria-label="redo cut" title="Redo cut (Ctrl+Shift+Z)" disabled>↷</button>
+    <button id="knifeSound" aria-label="cutting sound" aria-pressed="false" title="Cutting sound off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4 6 8H3v8h3l5 4Z"/><g id="knifeSoundWaves" hidden><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></g><path id="knifeSoundMute" d="m16 9 5 6m0-6-5 6"/></svg></button>
+    <details id="knifeSettings"><summary aria-label="cutting mat settings" title="Cutting mat settings">⚙</summary><div class="knife-menu-panel"><div id="stencilSaveRow"><div class="row"><label for="stencilName">name</label><input id="stencilName" maxlength="80" placeholder="name your stencil"><button id="stencilSave" disabled>save stencil</button></div><div class="row"><label><input id="knifeSaveLibrary" type="checkbox">save stencil for future sessions</label></div><div class="note" id="stencilLibraryStatus" role="status"></div></div><div class="note" id="knifeHelp">hold and drag to cut · draw around a shape · seal the cut to lift your stencil</div><div class="note">keyboard: arrows move the knife · Shift for fine cuts · Space marks a corner or lowers/lifts the blade · Enter seals · Ctrl+Z undoes · Ctrl+Shift+Z redoes</div><span id="knifeStatus" role="status">fresh blade · your paper is waiting</span></div></details>
+    <button id="knifeClose">close</button>
+  </div>
+  <canvas id="knifeCanvas" width="1000" height="650" tabindex="0" aria-label="draw a stencil with a simulated craft knife"></canvas>
+  <footer><button id="knifeNew">new sheet</button><button id="knifeSeal">seal & lift</button><button id="knifeUse" disabled>save</button></footer>
+</dialog>
 <script>
 const $ = s => document.querySelector(s), UN = {in: 1, cm: 2.54, mm: 25.4};
 const pc = v => Math.round(v * 100) + '%'; pc.pct = true;                      // .pct: typed 25 means 25%
@@ -221,6 +374,7 @@ const copy = v => JSON.parse(JSON.stringify(v));
 function editSnapshot() {
   return {
     P: copy(P), settings: {w: st.w, h: st.h, touched: st.touched, dpi: st.dpi, fmt: st.fmt, bg: st.bg,
+      exportMode:st.exportMode, lumFmt:st.lumFmt, lum:copy(st.lum), cut:copy(st.cut),
       unit: st.unit, seed: st.seed, grid: st.grid, map: copy(st.map), inkOn: $('#inkbtn').classList.contains('on')},
     lines: $('#lines').checked,
     files: st.files.map(f => ({id: f.id, w: f.w, page: f.page, edited: f.edited})),
@@ -252,14 +406,15 @@ function endPinnedHistory() {
 function restoreEdit(s) {
   Object.keys(P).forEach(k => delete P[k]); Object.assign(P, s.P);
   Object.assign(st, s.settings); Object.assign(st.map, s.settings.map);
+  studioSync();
   st.files.forEach(f => { const saved = s.files.find(x => x.id === f.id); if (saved) Object.assign(f, saved); });
   $('#lines').checked = s.lines; $('#unit').value = st.unit; $('#dpi').value = st.dpi; $('#bg').value = st.bg;
   $('#seedn').textContent = st.seed;
-  document.querySelectorAll('#fmt button').forEach(b => b.classList.toggle('on', b.dataset.f === st.fmt));
+  document.querySelectorAll('#fmt button,#lum2d button').forEach(b => b.classList.toggle('on', b.dataset.f === st.fmt));
   $('#mapsec').hidden = !['map','triptych'].includes(st.fmt);
   $('#animsec').hidden = !['gif', 'mp4'].includes(st.fmt); motionLabels();
   for (const [id, value] of Object.entries(st.map)) {
-    const el = $('#' + id); el.value = value;
+    const el = $('#' + id); if (!el) continue; el.value = value;
     if (el.type === 'range') el.style.setProperty('--p', (value-el.min)/(el.max-el.min)*100 + '%');
   }
   for (const [k, control] of Object.entries(SLIDER)) if (P[k] !== undefined) { control.r.value = P[k]; control.set(); }
@@ -291,7 +446,7 @@ document.addEventListener('pointerup', endPinnedHistory, true);
 document.addEventListener('pointercancel', endPinnedHistory, true);
 document.addEventListener('dblclick', e => { if (e.target.matches('input[type=range]')) { finishHistory(); beginHistory(); } }, true);
 document.addEventListener('click', e => {
-  if (discreteHistoryButtons.has(e.target.closest('button')?.id) || e.target.closest('#fmt button') || e.target.closest('#lines')) {
+  if (discreteHistoryButtons.has(e.target.closest('button')?.id) || e.target.closest('#fmt button,#lum2d button,#lum3d button,#exportMode button') || e.target.closest('#lines')) {
     finishHistory(); beginHistory(); setTimeout(finishHistory, 0);
   }
 }, true);
@@ -299,6 +454,9 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !typingTarget(e.target)) {
     const key = e.key.toLowerCase();
     if (key === 'z' || key === 'y') {
+      if ($('#knifeDialog').open) {
+        e.preventDefault();e.stopImmediatePropagation();key === 'y' || e.shiftKey ? knifeRedoAction() : knifeUndoAction();return;
+      }
       e.preventDefault(); key === 'y' || e.shiftKey ? redo() : undo(); return;
     }
   }
@@ -312,6 +470,7 @@ $('#settings').onclick = () => {
   const open = $('#settingsPanel').hidden;
   $('#settingsPanel').hidden = !open; $('#sideScroll').hidden = open;
   $('#settings').setAttribute('aria-expanded', String(open));
+  $('#panelTitle').textContent=open?'export':'morphaic';
 };
 $('#closeSettings').onclick = $('#settings').onclick;
 
@@ -364,15 +523,17 @@ function info(keep) {   // keep: id of the field being typed in, so it isn't rew
 // ---- sources
 const esc = s => s.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 function files() {
+  const unit=$('#unit');$('#sourceUnitsRow').append(unit);unit.value=st.unit;$('#sourceUnitsRow').hidden=st.files.length>0;
   $('#files').replaceChildren();
   st.files.forEach((f, i) => {
     const d = document.createElement('div');
     d.className = 'file';
     d.innerHTML = `<div class="nm"><span title="${esc(f.name)}">${esc(f.name)}</span><button title="remove">×</button></div>
-      <div class="row"><input type="number" step="any" min="0.1" aria-label="source width" value="${show(f.w)}"><span>× <b class="h">${show(f.w * f.aspect)}</b> ${st.unit}</span>
+      <div class="row"><input type="number" step="any" min="0.1" aria-label="source width" value="${show(f.w)}"><span>× <b class="h">${show(f.w * f.aspect)}</b></span>
       ${f.pdf ? `<span class="grow"></span><span>page</span><input type="number" min="1" max="${f.pages}" value="${f.page}" aria-label="page"><span>/ ${f.pages}</span>` : ''}</div>
       <div class="tag ${f.assumed && !f.edited ? 'warn' : ''}">${f.edited ? 'size set by you' : f.assumed ? 'no dpi in file, assumed 300 dpi' : f.pdf ? 'size from pdf' : 'size from file'}</div>`;
     const [w, pg] = d.querySelectorAll('input');
+    const units=i===0?unit:unit.cloneNode(true);units.removeAttribute('id');if(i===0)units.id='unit';units.value=st.unit;units.onchange=setUnits;d.querySelector('.row').insertBefore(units,d.querySelector('.h').parentElement.nextSibling);
     w.oninput = () => { if (!(+w.value > 0)) return; f.w = toIn(+w.value); f.edited = true; d.querySelector('.h').textContent = show(f.w * f.aspect); d.querySelector('.tag').textContent = 'size set by you'; d.querySelector('.tag').className = 'tag'; syncOut(); info(); draw(false); };
     if (pg) pg.oninput = () => { f.page = Math.min(Math.max(+pg.value | 0, 1), f.pages); draw(false); };
     d.querySelector('button').onclick = () => { fetch('/source/' + f.id, {method: 'DELETE'}); st.files.splice(i, 1); after(); };
@@ -402,9 +563,11 @@ addEventListener('drop', e => { e.preventDefault(); document.body.classList.remo
 function syncOut() {
   const f = st.files[0];
   if (f && !st.touched) { st.w = f.w; st.h = f.w * f.aspect; }
+  if (window.studioLinkSize) studioLinkSize();
   outUI();
 }
 function outUI() {
+  if (window.studioLinkSize) studioLinkSize();
   $('#ow').value = st.w ? show(st.w) : ''; $('#oh').value = st.h ? show(st.h) : ''; $('#ou').textContent = st.unit;
   const panelWidth = Math.round(st.w * st.dpi), h = Math.round(st.h * st.dpi);
   const w = st.fmt === 'triptych' ? 3*panelWidth+2*Math.max(1,Math.round(.15*st.dpi)) : panelWidth, big = w * h > 4e8;
@@ -416,17 +579,19 @@ function outUI() {
   if (lines.disabled) lines.checked = false;
   if (st.fmt==='txt') $('#px').textContent = 'plain text · settings and alterations';
   $('#go').textContent = 'export ' + st.fmt + (lines.checked && st.fmt!=='txt' ? ' + linework' : '');
+  if (window.studioOutput) studioOutput();
 }
 $('#lines').onchange = outUI;
 $('#ow').oninput = () => { if (+$('#ow').value > 0) { st.w = toIn(+$('#ow').value); st.touched = true; outUI(); draw(false); } };
 $('#oh').oninput = () => { if (+$('#oh').value > 0) { st.h = toIn(+$('#oh').value); st.touched = true; outUI(); draw(false); } };
 $('#dpi').oninput = () => { if (+$('#dpi').value > 0) { st.dpi = +$('#dpi').value; outUI(); } };
-$('#fmt').onclick = e => {
+$('#fmt').onclick = $('#lum2d').onclick = e => {
   const f = e.target.dataset.f; if (!f) return;
-  st.fmt = f; document.querySelectorAll('#fmt button').forEach(b => b.classList.toggle('on', b === e.target));
+  st.fmt = f; document.querySelectorAll('#fmt button,#lum2d button').forEach(b => b.classList.toggle('on', b === e.target));
   $('#mapsec').hidden = !['map','triptych'].includes(f); $('#animsec').hidden = !['gif', 'mp4'].includes(f); outUI(); draw(false);
 };
-$('#unit').onchange = e => { st.unit = e.target.value; files(); info(); outUI(); };
+function setUnits(e){st.unit=e.target.value;$('#unit').value=st.unit;files();info();outUI();}
+$('#unit').onchange = setUnits;
 $('#seed').onclick = () => { st.seed = Math.floor(Math.random() * 10000); $('#seedn').textContent = st.seed; draw(false); };
 $('#bg').oninput = e => { st.bg = e.target.value; draw(true); };
 $('#bg').onchange = () => draw(false);
@@ -434,12 +599,13 @@ $('#bg').value = st.bg; $('#dpi').value = st.dpi; $('#seedn').textContent = st.s
 
 // ---- render: one request in flight; sliders drag at half resolution, then sharpen on release
 const body = () => JSON.stringify({
-  p: {...P, ...st.map, seed: st.seed, bg: st.bg, w: st.w, h: st.h, dpi: st.dpi, pv: st.pv, unit:st.unit, grid_visible:st.grid,
+  p: {...P, ...st.map, ...st.cut, seed: st.seed, bg: st.bg, w: st.w || 8.5, h: st.h || 11, dpi: st.dpi, pv: st.pv, unit:st.unit, grid_visible:st.grid,
       pts: strokes.flat().map(([x, y]) => [+x.toFixed(4), +y.toFixed(4)])},
   sources: st.files.map(f => ({id: f.id, w: f.w, page: f.page - 1})),
-  map: st.fmt === 'map', grid: st.grid, lines: $('#lines').checked});
+  map: st.fmt === 'map', grid: st.grid, lines: $('#lines').checked, luminosity:st.lum});
 let busy = false, again = null;
 async function draw(fast) {
+  if (window.studioSchedule) studioSchedule();
   if (!st.files.length) return;
   if (busy) { again = again === false ? false : fast; return; }
   busy = true;
@@ -452,6 +618,7 @@ async function draw(fast) {
       const old = v.src; v.src = URL.createObjectURL(await r.blob());
       if (old.startsWith('blob:')) URL.revokeObjectURL(old);
       $('#ms').textContent = r.headers.get('X-Ms') + ' ms';
+      if (window.studioCounts) studioCounts(JSON.parse(r.headers.get('X-Cut-Counts') || '{}'));
     } else toast((await r.json()).error);
   } catch (e) { toast(String(e)); }
   busy = false;
@@ -460,6 +627,7 @@ async function draw(fast) {
 let rs; addEventListener('resize', () => { clearTimeout(rs); rs = setTimeout(() => draw(false), 120); });
 
 $('#go').onclick = async () => {
+  if (st.exportMode==='3d' || st.fmt.startsWith('lum-')) return studioExport();
   if (!st.files.length && st.fmt!=='txt') return toast('add an image or pdf first');
   const b = $('#go'); b.disabled = true; b.textContent = 'rendering…';
   try {
@@ -475,6 +643,7 @@ const exportFolderReady = fetch('/export-settings').then(async r => {
   if (!r.ok) throw new Error('could not load export folder');
   const settings = await r.json(); $('#exportfolder').value = settings.folder;
   Object.assign(st.map,settings.map_defaults || {});
+  if (window.studioSync) studioSync();
   for (const [key,value] of Object.entries(settings.map_defaults || {})) {
     const el = $('#'+key); if (!el) continue; el.value = value;
     if (el.type==='range') el.style.setProperty('--p',(el.value-el.min)/(el.max-el.min)*100+'%');
@@ -656,5 +825,7 @@ for (const [id, v] of Object.entries(st.map)) {
 
 info(); outUI(); curveSet(false);
 </script>
+<script src="/controls.js"></script>
+<script src="/studio.js"></script>
 </body>
 </html>

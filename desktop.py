@@ -1,4 +1,4 @@
-"""Launch Collage in a standalone desktop window."""
+"""Launch morphaic in a standalone desktop window."""
 
 from __future__ import annotations
 
@@ -22,13 +22,13 @@ class DesktopAPI:
 def webview_storage_path() -> Path:
     """Keep WebView2's profile in a stable, per-user writable folder."""
     if sys.platform=='darwin':
-        path = Path.home()/'Library'/'Application Support'/'Collage'/'WebView'
+        path = Path.home()/'Library'/'Application Support'/'Morphaic'/'WebView'
         path.mkdir(parents=True,exist_ok=True)
         return path
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
         local_app_data = str(Path.home() / "AppData" / "Local")
-    path = Path(local_app_data) / "Collage" / "WebView2"
+    path = Path(local_app_data) / "Morphaic" / "WebView2"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -37,7 +37,7 @@ def run_gui_smoke_test(url: str, webview) -> None:
     """Exercise the packaged native window, WebView2 backend, and bundled UI."""
     result: dict[str, str | None] = {"error": None, "title": None}
     window = webview.create_window(
-        "Collage smoke test",
+        "morphaic smoke test",
         url,
         width=840,
         height=620,
@@ -49,7 +49,7 @@ def run_gui_smoke_test(url: str, webview) -> None:
             has_controls = window.evaluate_js(
                 "['open', 'pick', 'go', 'unit', 'animpreview', 'node_end_size', 'exportfolder'].every(id => document.getElementById(id))"
             )
-            if str(title).strip().lower() != "collage" or not has_controls:
+            if str(title).strip().lower() != "morphaic" or not has_controls:
                 raise RuntimeError("desktop smoke test loaded an unexpected page")
             result["title"] = str(title)
         except Exception as error:
@@ -58,7 +58,7 @@ def run_gui_smoke_test(url: str, webview) -> None:
             window.destroy()
 
     def on_timeout() -> None:
-        result["error"] = "desktop smoke test timed out waiting for the Collage page"
+        result["error"] = "desktop smoke test timed out waiting for the morphaic page"
         write_smoke_error(result["error"])
         try:
             window.destroy()
@@ -77,14 +77,14 @@ def run_gui_smoke_test(url: str, webview) -> None:
     if result["error"]:
         raise RuntimeError(result["error"])
     if result["title"] is None:
-        raise RuntimeError("desktop smoke test closed before the Collage page loaded")
+        raise RuntimeError("desktop smoke test closed before the morphaic page loaded")
 
 
 def write_smoke_error(message: str | None = None) -> None:
     log_path = os.environ.get("COLLAGE_SMOKE_LOG")
     if not log_path:
         temp_dir = Path(tempfile.gettempdir())
-        log_path = str(temp_dir / "Collage-smoke-error.log")
+        log_path = str(temp_dir / "morphaic-smoke-error.log")
     try:
         Path(log_path).parent.mkdir(parents=True, exist_ok=True)
         detail = message if message is not None else traceback.format_exc()
@@ -128,6 +128,14 @@ def verify_packaged_formats():
             raise RuntimeError(f'packaged {fmt} export produced no data')
         if fmt=='mp4' and data[4:8]!=b'ftyp':
             raise RuntimeError('packaged MP4 encoder produced an invalid file')
+    import luminosity
+    relief = dict(width_mm=20,height_mm=15,spacing_mm=2,source='collage')
+    for fmt in ('stl','3dm','png','tif'):
+        data,_ = luminosity.export(raw,specs,store,relief,fmt)
+        if len(data)<100:
+            raise RuntimeError(f'packaged luminosity {fmt} export produced no data')
+    collage.export({**raw,'cut_shape':'star'},specs,store,'png')
+    luminosity.export(raw,specs,store,{**relief,'width_mm':100,'height_mm':75,'spacing_mm':5,'cleat':True},'3dm')
 
 
 def main() -> int:
@@ -166,7 +174,7 @@ def main() -> int:
             return 0
 
         webview.create_window(
-            "Collage",
+            "morphaic",
             f"http://127.0.0.1:{port}",
             width=1280,
             height=900,
@@ -180,18 +188,18 @@ def main() -> int:
             write_smoke_error()
             return 1
 
-        message = f"Collage could not start.\n\n{error}"
+        message = f"morphaic could not start.\n\n{error}"
         try:
             import ctypes
 
             if sys.platform=='darwin':
                 from AppKit import NSAlert
                 alert = NSAlert.alloc().init()
-                alert.setMessageText_('Collage could not start')
+                alert.setMessageText_('morphaic could not start')
                 alert.setInformativeText_(str(error))
                 alert.runModal()
             else:
-                ctypes.windll.user32.MessageBoxW(0, message, "Collage", 0x10)
+                ctypes.windll.user32.MessageBoxW(0, message, "morphaic", 0x10)
         except Exception:
             pass
         return 1

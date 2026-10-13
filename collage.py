@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import pymupdf
+import shapes
 from pillow_heif import register_heif_opener
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
@@ -59,6 +60,7 @@ def clean(raw):
     for key, default, choices in [('node_start', 'dot', ('none', 'dot', 'ring', 'square')), ('node_end', 'arrow', ('none', 'arrow', 'dot', 'ring', 'square'))]:
         value = raw.get(key, default)
         p[key] = value if value in choices else default
+    p.update(shapes.clean(raw))
     return p
 
 
@@ -243,6 +245,13 @@ def render(p, items, ppi, resample, pieces=None):
             return None   # off the canvas
         tile = im.resize((tw, th), resample, box=(u0 * im.width, v0 * im.height, u1 * im.width, v1 * im.height))
         rad = min(int(p["blur"] * 0.25 * min(tw, th)), (min(tw, th) - 1) // 2)
+        shape = shapes.shape_for(p, pc)
+        if shape != 'rectangle':
+            tile = tile.convert('RGBA')
+            stencil = shapes.mask(shape, p['custom_shape'], (tw, th))
+            if rad >= 1:
+                stencil = stencil.filter(ImageFilter.GaussianBlur(rad / 2))
+            tile.putalpha(ImageChops.multiply(tile.getchannel('A'), stencil))
         if rad >= 1:   # feather the edge: fade alpha to 0 over ~2*rad px
             soft = Image.new("L", (tw, th), 0)
             soft.paste(255, (rad, rad, tw - rad, th - rad))
@@ -268,13 +277,13 @@ def _spec(s, store):
     return src, min(max(int(s.get("page", 0)), 0), src.pages - 1), min(max(float(s["w"]), 0.1), 400)
 
 
-def compose(raw, specs, store, final=False):
+def compose(raw, specs, store, final=False, long_edge=None):
     """raw: params, specs: [{id, w (inches), page}] -> (clean params, RGB image)."""
     p = clean(raw)
     if not specs:
         raise ValueError("add an image or PDF first")
     if final:
-        ppi = p["dpi"]
+        ppi = long_edge / max(p['w'], p['h']) if long_edge else p["dpi"]
         if p["w"] * p["h"] * ppi * ppi > MAX_PIXELS:
             raise ValueError(f"{p['w'] * ppi:.0f} x {p['h'] * ppi:.0f} px is over the {MAX_PIXELS // 10**6} MP limit")
     else:
@@ -317,13 +326,25 @@ def migration_line_end(p, pc):
     if d < 1e-10:
         return None
     ux, uy = (cx-bx)/d, (cy-by)/d
-    style, radius = p['node_end'], .045*p['node_end_size']
+    style, radius = shapes.end_style(p, pc), .045*p['node_end_size']
     if style in ('dot', 'ring'):
         trim = radius
     elif style == 'square':
         trim = radius/max(abs(ux), abs(uy))
     elif style == 'arrow' and d >= .05:
         trim = min(.12*p['node_end_size'], d/3)
+    elif style == 'cut':
+        # Ray/segment intersection with the actual stencil marker boundary.
+        trim = 0
+        boundary = shapes.outline(p, pc, size=2*radius)
+        for a, b in zip(boundary, boundary[1:]):
+            vx, vy = b[0]-a[0], b[1]-a[1]
+            ax, ay = a[0]-cx, a[1]-cy
+            den = (-ux)*vy - (-uy)*vx
+            if abs(den) > 1e-12:
+                t, u = (ax*vy-ay*vx)/den, (ax*(-uy)-ay*(-ux))/den
+                if t >= 0 and 0 <= u <= 1:
+                    trim = max(trim, t)
     else:
         trim = 0
     if d <= trim:
@@ -362,11 +383,11 @@ def _map_doc(raw, specs, store, layers):
         for pc in pieces:
             if pc[7:] not in seen:   # each layer re-uses the same home spots
                 seen.add(pc[7:])
-                sh.draw_polyline([pt(q) for q in corners(*pc[7:], 0)])
+                sh.draw_polyline([pt(q) for q in shapes.outline(p, pc, initial=True)])
 
     def final(sh):
         for pc in pieces:
-            sh.draw_polyline([pt(q) for q in corners(*pc[2:6], pc[6])])
+            sh.draw_polyline([pt(q) for q in shapes.outline(p, pc)])
 
     def lines(sh):
         for pc in pieces:
@@ -375,13 +396,18 @@ def _map_doc(raw, specs, store, layers):
             if end is not None:
                 sh.draw_line(pt(pc[7:9]), pt(end))
 
-    def markers(sh, key, at_start=False):
+    def markers(sh, key, at_start=False, only_style=None):
         for pc in pieces:
             (bx, by), (cx, cy) = pc[7:9], pc[2:4]
             if at_start:
                 bx, by, cx, cy = cx, cy, bx, by
             scale = 1 if at_start else p['node_end_size']
-            style, radius = p[key], .045*scale
+            style, radius = (p[key] if at_start else shapes.end_style(p, pc)), .045*scale
+            if only_style is not None and style != only_style:
+                continue
+            if style == 'cut':
+                sh.draw_polyline([pt(q) for q in shapes.outline(p, pc, size=2*radius)])
+                continue
             if style in ('dot', 'ring'):
                 sh.draw_circle(pt((cx, cy)), radius * 72)
                 continue
@@ -419,7 +445,9 @@ def _map_doc(raw, specs, store, layers):
                 ink(2, strokes, closed=False, soft=0.6)
             ink(2, lines, closed=False)
             ink(2, lambda sh: markers(sh, 'node_start', True), fill=0 if p['node_start'] == 'ring' else 1)
-            ink(2, lambda sh: markers(sh, 'node_end'), fill=0 if p['node_end'] == 'ring' else 1)
+            for style in shapes.NODE_STYLES:
+                if style != 'none':
+                    ink(2, lambda sh, style=style: markers(sh, 'node_end', only_style=style), fill=0 if style == 'ring' else 1)
         else:
             ink(3, final, fill=0.15)
     return doc.tobytes(deflate=True)
@@ -456,6 +484,13 @@ def portions_pdf(raw, specs, store):
                 page.draw_line((x0 + (x1 - x0) * c / cols, y0), (x0 + (x1 - x0) * c / cols, y1), color=(0.45, 0.45, 0.45), width=0.3)
             for r in range(1, rows):
                 page.draw_line((x0, y0 + (y1 - y0) * r / rows), (x1, y0 + (y1 - y0) * r / rows), color=(0.45, 0.45, 0.45), width=0.3)
+            for row in range(rows):
+                for col in range(cols):
+                    u0, v0 = a0 + (a1-a0)*col/cols, b0 + (b1-b0)*row/rows
+                    u1, v1 = a0 + (a1-a0)*(col+1)/cols, b0 + (b1-b0)*(row+1)/rows
+                    pc = (si,(u0,v0,u1,v1),0,0,0,0,0,(u0+u1)*w/2,(v0+v1)*h/2,(u1-u0)*w,(v1-v0)*h)
+                    if shapes.shape_for(p,pc) != 'rectangle':
+                        page.draw_polyline([(x*72,y*72) for x,y in shapes.outline(p,pc,initial=True)],color=(0,0,0),width=.5)
             page.draw_rect(pymupdf.Rect(x0, y0, x1, y1), color=(0, 0, 0), width=1.5)
             size = max(6, min(w, h) * 72 * 0.04)
             page.insert_text((x0 + size * 0.4, y0 + size * 1.2), str(n), fontsize=size)
@@ -629,10 +664,12 @@ def settings_text(raw, specs, store, lines=False):
         src, page, width = _spec(spec,store)
         sources.append({'name':src.name,'width_inches':width,'page':page+1})
     unit = raw.get('unit','in')
-    document = {'format':'Collage settings','schema_version':1,
+    document = {'format':'morphaic settings','schema_version':1,
                 'units':unit if unit in ('in','cm','mm') else 'in',
                 'parameters':p,'guides':{'grid_visible':bool(raw.get('grid_visible'))},
                 'portion_linework':bool(lines),'sources':sources}
+    if isinstance(raw.get('luminosity'), dict):
+        document['luminosity'] = raw['luminosity']
     return (json.dumps(document,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
 
 

@@ -1,17 +1,23 @@
 """py test_collage.py  (also works under pytest)"""
 import io
 import json
+import math
 import pathlib
 import struct
 import tempfile
 import threading
 import zipfile
+import urllib.request
+from collections import Counter
 
 import pymupdf
 from PIL import Image, ImageChops
 
 import collage as C
 import server
+import luminosity as L
+import mounting
+import shapes
 
 # neutral settings: sections go back exactly where they were cut
 FLAT = dict(cw=0.25, ch=0.25, scale=1, var=0, rot=0, scatter=0, density=1, layers=1, opacity=1, bg="#000000")
@@ -441,6 +447,244 @@ def test_export_folder_persistence_and_no_overwrite():
             assert defaults['m2c']=='#ff0000' and defaults['node_end']=='ring'
     finally:
         server.SETTINGS_PATH, server.EXPORT_FOLDER = original_settings, original_folder
+
+
+def test_shape_cuts_default_and_transparent_corners():
+    store = {'a': C.open_source('white.png', png(120,120,dpi=120,color='white')[1])}
+    spec = [{'id':'a','w':1}]
+    raw = {**FLAT,'cw':1,'ch':1,'w':1,'h':1,'dpi':120}
+    _, rectangle = C.compose(raw,spec,store,final=True)
+    assert rectangle.getextrema() == ((255,255),)*3
+    for shape in ('ellipse','triangle','diamond','hexagon','star','heart','custom'):
+        _, image = C.compose({**raw,'cut_shape':shape,'custom_shape':[[.5,0],[1,1],[0,1]]},spec,store,final=True)
+        assert image.getpixel((0,0)) == (0,0,0), shape
+        assert image.getpixel((60,60)) == (255,255,255), shape
+
+
+def test_mixed_shapes_are_stable_across_motion_resolution_and_layers():
+    p = C.clean({**FLAT,'multi_shape':True,'shape_weights':{'rectangle':30,'ellipse':70},'cw':.05,'ch':.05})
+    pcs = C.layout(p,[(1,1)],1,1)
+    before = {pc[:2]:shapes.shape_for(p,pc) for pc in pcs}
+    moved = C.layout({**p,'scatter':1,'rot':150,'scale':2,'layers':3},[(1,1)],1,1)
+    assert all(shapes.shape_for(p,pc)==before[pc[:2]] for pc in moved)
+    counts = shapes.counts(p,pcs)
+    assert sum(counts.values()) == 400 and 230 < counts['ellipse'] < 330
+    assert C.clean({})['cut_shape']=='rectangle' and not C.clean({})['multi_shape']
+
+
+def test_custom_stencil_and_shares_validation():
+    for raw in ({'shape_weights':{'ellipse':float('nan')}}, {'shape_weights':{'star':-1}},
+                {'multi_shape':True,'shape_weights':{'custom':100}}, {'custom_shape':[[float('inf'),0]]}):
+        try:
+            C.clean(raw)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f'invalid stencil accepted: {raw}')
+    assert C.clean({'shape_weights':{}})['shape_weights']['rectangle']==100
+
+
+def test_shape_migration_outlines_and_per_shape_marker_trimming():
+    raw={**FLAT,'cut_shape':'triangle','node_by_shape':True,'node_end_shapes':{'triangle':'ring'},'node_end':'square'}
+    p=C.clean(raw)
+    pc=(0,(0,0,1,1),1,1,.5,.5,0,0,1,.5,.5)
+    assert shapes.end_style(p,pc)=='ring'
+    assert C.migration_line_end(p,pc)==(.955,1)
+    p['node_end_shapes']['triangle']='cut'
+    end=C.migration_line_end(p,pc)
+    assert abs(end[0]-.9775)<1e-9 and end[1]==1
+    store={'a':C.open_source('a.png',png(100,100,color='white')[1])}
+    for shape in ('rectangle','ellipse','triangle','diamond','hexagon','star','heart','custom'):
+        data=C.migration_pdf({**raw,'cut_shape':shape,'custom_shape':[[.5,0],[1,1],[0,1]],'w':1,'h':1},[{'id':'a','w':1}],store)
+        doc=pymupdf.open(stream=data,filetype='pdf')
+        assert len(doc)==1 and doc[0].get_drawings()
+
+
+def luminosity_fixture():
+    image=Image.new('RGB',(16,8),'black')
+    ImageDraw = __import__('PIL.ImageDraw',fromlist=['Draw'])
+    ImageDraw.Draw(image).rectangle((8,0,15,7),fill='white')
+    buf=io.BytesIO();image.save(buf,'PNG')
+    store={'a':C.open_source('half.png',buf.getvalue())}
+    return store, [{'id':'a','w':1}], {**FLAT,'w':1,'h':.5,'dpi':100}, dict(source='import',source_id='a',width_mm=20,height_mm=10,spacing_mm=2,base_mm=2,relief_mm=8)
+
+
+def test_relief_mesh_is_closed_outward_and_in_millimeters():
+    store,spec,raw,options=luminosity_fixture()
+    model=L.mesh(raw,spec,store,options)
+    assert model['units']=='mm' and model['grid']==[11,6]
+    assert min(v[0] for v in model['vertices'])==0 and max(v[0] for v in model['vertices'])==20
+    assert min(v[1] for v in model['vertices'])==0 and max(v[1] for v in model['vertices'])==10
+    assert min(v[2] for v in model['vertices'])==0 and max(v[2] for v in model['vertices'])==10
+    edges=Counter()
+    volume=0
+    for face in model['faces']:
+        for a,b in zip(face,face[1:]+face[:1]):edges[a,b]+=1
+        a,b,c=[model['vertices'][i] for i in face]
+        volume += (a[0]*(b[1]*c[2]-b[2]*c[1])+a[1]*(b[2]*c[0]-b[0]*c[2])+a[2]*(b[0]*c[1]-b[1]*c[0]))/6
+    assert all(count==1 and edges[b,a]==1 for (a,b),count in edges.items())
+    assert volume>0
+    inverse=L.mesh(raw,spec,store,{**options,'invert':True})
+    assert abs(model['vertices'][0][2]+inverse['vertices'][0][2]-12)<1e-8
+
+
+def test_stl_encodings_and_3dm_round_trip():
+    import rhino3dm
+    store,spec,raw,options=luminosity_fixture()
+    model=L.mesh(raw,spec,store,options)
+    for encoding in ('ascii','binary'):
+        data,name=L.export(raw,spec,store,{**options,'encoding':encoding},'stl')
+        assert name.endswith('-mm.stl')
+        if encoding=='ascii':
+            assert data.startswith(b'solid morphaic_mm') and data.count(b'facet normal')==len(model['faces'])
+            assert b'vertex 20 ' in data
+        else:
+            assert len(data)==84+50*len(model['faces']) and struct.unpack_from('<I',data,80)[0]==len(model['faces'])
+    data,name=L.export(raw,spec,store,options,'3dm')
+    doc=rhino3dm.File3dm.FromByteArray(data)
+    assert doc.Settings.ModelUnitSystem==rhino3dm.UnitSystem.Millimeters
+    assert len(doc.Objects)==1 and doc.Objects[0].Geometry.IsClosed
+    assert len(doc.Objects[0].Geometry.Faces)==len(model['faces'])
+
+
+def test_luminosity_raster_exports_and_current_collage():
+    store,spec,raw,options=luminosity_fixture()
+    for source in ('import','collage'):
+        for fmt in ('png','tif'):
+            data,name=L.export(raw,spec,store,{**options,'source':source},fmt)
+            im=Image.open(io.BytesIO(data))
+            assert im.mode=='L' and im.size==(79,39) and abs(im.info['dpi'][0]-100)<.1
+            assert im.getpixel((1,1))==0 and im.getpixel((77,1))==255
+    for key,value in [('spacing_mm',0),('width_mm',float('nan')),('base_mm',0)]:
+        try:L.mesh(raw,spec,store,{**options,key:value})
+        except ValueError:pass
+        else:raise AssertionError(f'invalid geometry accepted: {key}')
+    try:L.mesh(raw,spec,store,{**options,'width_mm':5000,'height_mm':5000,'spacing_mm':.05})
+    except ValueError as error:assert 'increase mesh spacing' in str(error)
+    else:raise AssertionError('oversized mesh accepted')
+    assert max(L.mesh(raw,spec,store,{**options,'width_mm':5000,'height_mm':5000,'spacing_mm':.05},preview=True)['grid'])<=81
+
+
+def test_saved_named_stencils_preserve_settings_and_rename():
+    original=server.SETTINGS_PATH
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            server.SETTINGS_PATH=pathlib.Path(folder)/'settings.json'
+            server.update_settings({'export_folder':folder,'map_defaults':{'node_end':'ring'}})
+            saved=server.save_stencil({'name':'My leaf','points':[[.5,0],[1,.7],[.5,1],[0,.7]]})
+            assert server.stencil_library()[0]['name']=='My leaf'
+            renamed=server.save_stencil({**saved,'name':'Leaf stencil'})
+            assert renamed['id']==saved['id'] and len(server.stencil_library())==1
+            data=json.loads(server.SETTINGS_PATH.read_text())
+            assert data['export_folder']==folder and data['map_defaults']['node_end']=='ring'
+            assert data['stencils'][0]['name']=='Leaf stencil'
+            for invalid in ({'name':'','points':saved['points']},{'name':'Line','points':[[0,0],[.5,.5],[1,1]]}):
+                try:server.save_stencil(invalid)
+                except ValueError:pass
+                else:raise AssertionError('invalid saved stencil accepted')
+    finally:server.SETTINGS_PATH=original
+
+
+def test_morphaic_settings_read_legacy_and_write_new_location():
+    original=(server.SETTINGS_PATH,server.DEFAULT_SETTINGS_PATH,server.LEGACY_SETTINGS_PATH)
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder)
+            server.DEFAULT_SETTINGS_PATH=server.SETTINGS_PATH=root/'Morphaic'/'settings.json'
+            server.LEGACY_SETTINGS_PATH=root/'Collage'/'settings.json'
+            server.LEGACY_SETTINGS_PATH.parent.mkdir()
+            legacy={'export_folder':folder,'stencils':[{'id':'old','name':'Old stencil','points':[[0,0],[1,0],[.5,1]]}]}
+            server.LEGACY_SETTINGS_PATH.write_text(json.dumps(legacy))
+            assert server.stencil_library()[0]['id']=='old'
+            server.update_settings({'new_feature':True})
+            assert server.SETTINGS_PATH.exists() and server.read_settings()['stencils']==legacy['stencils']
+            assert json.loads(server.LEGACY_SETTINGS_PATH.read_text())==legacy
+    finally:server.SETTINGS_PATH,server.DEFAULT_SETTINGS_PATH,server.LEGACY_SETTINGS_PATH=original
+
+
+def test_shape_shares_reject_totals_above_one_hundred():
+    try:C.clean({'shape_weights':{'rectangle':100,'ellipse':70}})
+    except ValueError as error:assert '100%' in str(error)
+    else:raise AssertionError('overallocated percentages accepted')
+    assert sum(C.clean({'shape_weights':{'ellipse':70}})['shape_weights'].values())==100
+
+
+def test_french_cleat_parts_hardware_holes_and_rear_pocket():
+    import manifold3d as m
+    import numpy as np
+    import rhino3dm
+    store,spec,raw,options=luminosity_fixture()
+    options={**options,'width_mm':100,'height_mm':75,'base_mm':3,'cleat':True}
+    for hardware in ('t-pins','plastic-pins','screws'):
+        model=L.mesh(raw,spec,store,{**options,'hardware':hardware})
+        assert len(model['parts'])==2 and model['mounting']['bevel_degrees']==45
+        for part in model['parts']:
+            solid=m.Manifold(m.Mesh(np.asarray(part['vertices'],dtype=np.float32),np.asarray(part['faces'],dtype=np.uint32)))
+            assert solid.status()==m.Error.NoError and solid.volume()>0
+        body_part=model['parts'][0]
+        body=m.Manifold(m.Mesh(np.asarray(body_part['vertices'],dtype=np.float32),np.asarray(body_part['faces'],dtype=np.uint32)))
+        assembled_wall=solid.translate((options['width_mm']*(1-options.get('cleat_width',.8))/2-options['width_mm']-8,model['mounting']['assembly_wall_offset_y_mm']-5,0))
+        assert (body^assembled_wall).volume()<1e-5
+        p=L.clean({**options,'hardware':hardware})
+        c=mounting.parameters(p)
+        radius=c['hole_diameter']/2
+        polygon_area=48/2*math.sin(2*math.pi/48)*radius**2
+        expected=c['width']*(c['height']-p['cleat_gap_mm']-c['depth']/2)-2*polygon_area
+        assert abs(solid.slice(-c['depth']/2).area()-expected)<.02,hardware
+        doc=rhino3dm.File3dm.FromByteArray(L.three_dm(model))
+        assert len(doc.Objects)==2 and all(o.Geometry.IsClosed for o in doc.Objects)
+        assert 'wall cleat' in doc.Objects[1].Attributes.Name
+    plain=L.mesh(raw,spec,store,options)['parts'][0]
+    hollow=L.mesh(raw,spec,store,{**options,'hollow_back':True})['parts'][0]
+    def volume(part):return m.Manifold(m.Mesh(np.asarray(part['vertices'],dtype=np.float32),np.asarray(part['faces'],dtype=np.uint32))).volume()
+    assert volume(hollow)<volume(plain)
+    no_wall=L.mesh(raw,spec,store,{**options,'include_wall_cleat':False})
+    assert len(no_wall['parts'])==1
+    assert mounting.parameters(L.clean({**options,'screw_sixteenths':4}))['hole_diameter']==6.35+.3
+    try:L.mesh(raw,spec,store,{**options,'width_mm':10})
+    except ValueError:pass
+    else:raise AssertionError('undersized cleat accepted')
+
+
+def test_luminosity_http_exports_and_cut_counts():
+    original_folder = server.EXPORT_FOLDER
+    original_settings = server.SETTINGS_PATH
+    http = server.Server(('127.0.0.1',0),server.Handler)
+    threading.Thread(target=http.serve_forever,daemon=True).start()
+    base = f'http://127.0.0.1:{http.server_address[1]}'
+    source_ids = []
+    def post(path, data):
+        return urllib.request.urlopen(urllib.request.Request(base+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'}),timeout=10)
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            server.EXPORT_FOLDER=pathlib.Path(folder)
+            server.SETTINGS_PATH=pathlib.Path(folder)/'settings.json'
+            with post('/stencils',{'name':'HTTP saved stencil','points':[[0,0],[1,0],[.5,1]]}) as response:stencil=json.load(response)['stencil']
+            with urllib.request.urlopen(base+'/stencils') as response:library=json.load(response)['stencils']
+            assert library[0]['id']==stencil['id'] and library[0]['name']=='HTTP saved stencil'
+            with post('/luminosity/demo',{}) as response:source=json.load(response)
+            source_ids.append(source['id'])
+            assert source['aspect']==.75
+            request=dict(p={**FLAT,'w':1,'h':.75,'dpi':100,'multi_shape':True,'shape_weights':{'rectangle':40,'ellipse':60}},
+                         sources=[{'id':source['id'],'w':1}],luminosity=dict(source='import',source_id=source['id'],width_mm=20,height_mm=15,spacing_mm=2))
+            with post('/luminosity/preview',request) as response:model=json.load(response)
+            assert model['units']=='mm' and model['preview']
+            with post('/preview',request) as response:
+                counts=json.loads(response.headers['X-Cut-Counts'])
+                assert sum(counts.values())==16 and counts['rectangle']>0 and counts['ellipse']>0
+            for fmt in ('stl','3dm','png','tif'):
+                with post('/luminosity/export/'+fmt,request) as response:result=json.load(response)
+                saved=pathlib.Path(result['path'])
+                assert saved.parent==pathlib.Path(folder) and saved.stat().st_size>100
+            with post('/export/txt',request) as response:result=json.load(response)
+            data=json.loads(pathlib.Path(result['path']).read_text())
+            assert data['parameters']['multi_shape'] and data['luminosity']['width_mm']==20
+            with urllib.request.urlopen(base+'/studio.js') as response:assert b'knifeSeal' in response.read()
+    finally:
+        server.EXPORT_FOLDER=original_folder
+        server.SETTINGS_PATH=original_settings
+        for sid in source_ids:server.STORE.pop(sid,None)
+        http.shutdown();http.server_close()
 
 
 if __name__ == "__main__":

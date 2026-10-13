@@ -28,7 +28,7 @@ jobs:
           $match = Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"'
           if (-not $match) { throw "Could not read project version from pyproject.toml" }
           "tag=v$($match.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
-          "filename=autocollage-$($match.Matches[0].Groups[1].Value).exe" >> $env:GITHUB_OUTPUT
+          "filename=morphaic-$($match.Matches[0].Groups[1].Value).exe" >> $env:GITHUB_OUTPUT
 
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
@@ -39,20 +39,23 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --extra desktop --group build
 
-      - name: Verify Collage processing and server
+      - name: Verify morphaic processing and server
         run: uv run --locked python test_collage.py
 
-      - name: Build Collage.exe
-        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name Collage --add-data "index.html;." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py
+      - name: Verify UI parameter constraints
+        run: node test_controls.js
+
+      - name: Build morphaic.exe
+        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onefile --windowed --name morphaic --add-data "index.html;." --add-data "studio.js;." --add-data "controls.js;." --collect-all manifold3d --collect-all rhino3dm --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py
 
       - name: Smoke-test packaged executable
         shell: pwsh
         run: |
-          $smokeLog = Join-Path $env:RUNNER_TEMP "Collage-smoke.log"
-          $webviewLog = Join-Path $env:RUNNER_TEMP "Collage-webview.log"
+          $smokeLog = Join-Path $env:RUNNER_TEMP "morphaic-smoke.log"
+          $webviewLog = Join-Path $env:RUNNER_TEMP "morphaic-webview.log"
           $env:COLLAGE_SMOKE_LOG = $smokeLog
           $env:COLLAGE_WEBVIEW_LOG = $webviewLog
-          $smoke = Start-Process -FilePath ".\dist\Collage.exe" -ArgumentList "--smoke-test" -PassThru
+          $smoke = Start-Process -FilePath ".\dist\morphaic.exe" -ArgumentList "--smoke-test" -WindowStyle Hidden -PassThru
           if (-not $smoke.WaitForExit(90000)) {
             $smoke.Kill($true)
             $smoke.WaitForExit()
@@ -66,13 +69,13 @@ jobs:
 
       - name: Name versioned Windows download
         shell: pwsh
-        run: Move-Item -LiteralPath dist/Collage.exe -Destination "dist/${{ steps.project_version.outputs.filename }}"
+        run: Move-Item -LiteralPath dist/morphaic.exe -Destination "dist/${{ steps.project_version.outputs.filename }}"
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: Collage-Windows
-          path: dist/autocollage-*.exe
+          name: morphaic-Windows
+          path: dist/morphaic-*.exe
           if-no-files-found: error
 
   macos:
@@ -105,19 +108,22 @@ jobs:
       - name: Verify processing and server
         run: uv run --locked python test_collage.py
 
-      - name: Build Collage.app
-        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onedir --windowed --name Collage --osx-bundle-identifier com.diafanous.collage --add-data "index.html:." --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py
+      - name: Verify UI parameter constraints
+        run: node test_controls.js
+
+      - name: Build morphaic.app
+        run: uv run --locked --extra desktop --group build pyinstaller --clean --noconfirm --onedir --windowed --name morphaic --osx-bundle-identifier com.diafanous.morphaic --add-data "index.html:." --add-data "studio.js:." --add-data "controls.js:." --collect-all manifold3d --collect-all rhino3dm --collect-all imageio_ffmpeg --collect-all pillow_heif --exclude-module PIL._imagingft desktop.py
 
       - name: Smoke-test packaged Mac app
         env:
-          COLLAGE_SMOKE_LOG: ${{ runner.temp }}/Collage-smoke.log
-          COLLAGE_WEBVIEW_LOG: ${{ runner.temp }}/Collage-webview.log
+          COLLAGE_SMOKE_LOG: ${{ runner.temp }}/morphaic-smoke.log
+          COLLAGE_WEBVIEW_LOG: ${{ runner.temp }}/morphaic-webview.log
         run: |
           uv run --locked python - <<'PY'
           import os, subprocess
           from pathlib import Path
           try:
-              subprocess.run(['dist/Collage.app/Contents/MacOS/Collage','--smoke-test'],timeout=120,check=True)
+              subprocess.run(['dist/morphaic.app/Contents/MacOS/morphaic','--smoke-test'],timeout=120,check=True)
           finally:
               for name in ('COLLAGE_SMOKE_LOG','COLLAGE_WEBVIEW_LOG'):
                   log = Path(os.environ[name])
@@ -128,13 +134,13 @@ jobs:
       - name: Package Mac app
         run: |
           VERSION=$(uv run --locked python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          ditto -c -k --sequesterRsrc --keepParent dist/Collage.app "dist/autocollage-${VERSION}-macos-${{ matrix.slug }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/morphaic.app "dist/morphaic-${VERSION}-macos-${{ matrix.slug }}.zip"
 
       - name: Upload Mac app
         uses: actions/upload-artifact@v4
         with:
-          name: Collage-macOS-${{ matrix.arch }}
-          path: dist/autocollage-*-macos-${{ matrix.slug }}.zip
+          name: morphaic-macOS-${{ matrix.arch }}
+          path: dist/morphaic-*-macos-${{ matrix.slug }}.zip
           if-no-files-found: error
 
   publish:
@@ -144,10 +150,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
       - name: Download desktop builds
         uses: actions/download-artifact@v4
         with:
-          pattern: Collage-*
+          pattern: morphaic-*
           merge-multiple: true
           path: dist
 
@@ -162,8 +171,8 @@ jobs:
             if [ "$IS_MAIN_PUSH" = "true" ]; then
               echo "Release $TAG_NAME already exists; leaving it unchanged."
             else
-              gh release upload "$TAG_NAME" dist/autocollage-*.exe dist/autocollage-*-macos-*.zip --repo "$REPOSITORY" --clobber
+              gh release upload "$TAG_NAME" dist/morphaic-*.exe dist/morphaic-*-macos-*.zip --repo "$REPOSITORY" --clobber
             fi
           else
-            gh release create "$TAG_NAME" dist/autocollage-*.exe dist/autocollage-*-macos-*.zip --repo "$REPOSITORY" --target "$GITHUB_SHA" --generate-notes --title "Collage $TAG_NAME"
+            gh release create "$TAG_NAME" dist/morphaic-*.exe dist/morphaic-*-macos-*.zip --repo "$REPOSITORY" --target "$GITHUB_SHA" --notes-file RELEASE_NOTES.md --title "morphaic $TAG_NAME"
           fi

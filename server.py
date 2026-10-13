@@ -15,6 +15,8 @@ from pathlib import Path
 from urllib.parse import unquote
 
 import collage
+import luminosity
+import shapes
 
 def resource_root():
     """Return the directory containing bundled data files when frozen."""
@@ -38,10 +40,13 @@ def downloads_folder():
 
 
 SETTINGS_ROOT = (Path.home()/'Library'/'Application Support') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA') or Path.home())
-SETTINGS_PATH = SETTINGS_ROOT / 'Collage' / 'settings.json'
+DEFAULT_SETTINGS_PATH = SETTINGS_ROOT / 'Morphaic' / 'settings.json'
+LEGACY_SETTINGS_PATH = SETTINGS_ROOT / 'Collage' / 'settings.json'
+SETTINGS_PATH = DEFAULT_SETTINGS_PATH
 EXPORT_FOLDER = downloads_folder()
 try:
-    saved_folder = json.loads(SETTINGS_PATH.read_text(encoding='utf-8')).get('export_folder')
+    settings_file = SETTINGS_PATH if SETTINGS_PATH.exists() else LEGACY_SETTINGS_PATH
+    saved_folder = json.loads(settings_file.read_text(encoding='utf-8')).get('export_folder')
     if saved_folder and Path(saved_folder).is_dir():
         EXPORT_FOLDER = Path(saved_folder)
 except (OSError, ValueError, TypeError):
@@ -61,24 +66,60 @@ def set_export_folder(folder):
 
 def read_settings():
     try:
-        data = json.loads(SETTINGS_PATH.read_text(encoding='utf-8'))
+        path = LEGACY_SETTINGS_PATH if SETTINGS_PATH == DEFAULT_SETTINGS_PATH and not SETTINGS_PATH.exists() else SETTINGS_PATH
+        data = json.loads(path.read_text(encoding='utf-8'))
         return data if isinstance(data,dict) else {}
     except (OSError,ValueError):
         return {}
 
 
 SETTINGS_LOCK = threading.Lock()
-MAP_KEYS = tuple(k for k in collage.SPEC if k.startswith('m') and k[1:2] in ('1','2','3')) + tuple(k for k in collage.COLORS if k.startswith('m')) + ('node_start','node_end','node_end_size')
+MAP_KEYS = tuple(k for k in collage.SPEC if k.startswith('m') and k[1:2] in ('1','2','3')) + tuple(k for k in collage.COLORS if k.startswith('m')) + ('node_start','node_end','node_end_size','node_by_shape','node_end_shapes')
 
 
 def update_settings(changes):
     with SETTINGS_LOCK:
         data = read_settings()
         data.update(changes)
-        SETTINGS_PATH.parent.mkdir(parents=True,exist_ok=True)
-        temporary = SETTINGS_PATH.with_suffix('.tmp')
-        temporary.write_text(json.dumps(data),encoding='utf-8')
-        temporary.replace(SETTINGS_PATH)
+        write_settings(data)
+
+
+def write_settings(data):
+    SETTINGS_PATH.parent.mkdir(parents=True,exist_ok=True)
+    temporary = SETTINGS_PATH.with_suffix('.tmp')
+    temporary.write_text(json.dumps(data),encoding='utf-8')
+    temporary.replace(SETTINGS_PATH)
+
+
+def stencil_library():
+    result = []
+    items = read_settings().get('stencils', [])
+    if not isinstance(items, list):
+        return result
+    for item in items:
+        try:
+            result.append({'id': str(item['id']), **shapes.stencil(item)})
+        except (KeyError, ValueError, TypeError):
+            continue
+    return result
+
+
+def save_stencil(raw):
+    stencil = shapes.stencil(raw)
+    with SETTINGS_LOCK:
+        data = read_settings()
+        library = stencil_library()
+        sid = str(raw.get('id', ''))
+        if sid and not any(item['id'] == sid for item in library):
+            raise ValueError('saved stencil no longer exists; save it as a new stencil')
+        sid = sid or uuid.uuid4().hex
+        saved = {'id': sid, **stencil}
+        library = [saved if item['id'] == sid else item for item in library]
+        if not any(item['id'] == sid for item in library):
+            library.append(saved)
+        data['stencils'] = library
+        write_settings(data)
+    return saved
 
 
 def map_defaults():
@@ -120,7 +161,7 @@ if getattr(sys, "frozen", False):
     # is stable across launches and changes when the bundled app is replaced.
     STAMP = str(Path(sys.executable).stat().st_mtime_ns)
 else:
-    STAMP = str(max((ROOT / f).stat().st_mtime_ns for f in ("collage.py", "server.py")))
+    STAMP = str(max((ROOT / f).stat().st_mtime_ns for f in ("collage.py", "server.py", "luminosity.py", "mounting.py", "shapes.py", "index.html", "studio.js", "controls.js")))
 EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp", ".gif", ".pdf", ".heic", ".heif"}
 
 
@@ -190,8 +231,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200, STAMP.encode(), "text/plain")
             elif self.path == '/export-settings':
                 self.reply(200, {'folder': str(EXPORT_FOLDER), 'map_defaults': map_defaults()})
+            elif self.path == '/stencils':
+                self.reply(200, {'stencils': stencil_library()})
             elif self.path == "/":
                 self.reply(200, (ROOT / "index.html").read_bytes(), "text/html; charset=utf-8")
+            elif self.path in ('/studio.js', '/controls.js'):
+                self.reply(200, (ROOT / self.path[1:]).read_bytes(), 'text/javascript; charset=utf-8')
             elif self.path.startswith("/font/") and self.path.endswith(".woff2") and self.path[6:-6] in ("Light", "Regular", "Medium"):
                 f = font(self.path[6:-6])
                 self.reply(200 if f else 404, f or b"", "font/woff2", Cache_Control="max-age=86400")
@@ -207,6 +252,8 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == '/map-defaults':
                 req = json.loads(self.body())
                 self.reply(200, {'map_defaults': save_map_defaults(req['settings'])})
+            elif self.path == '/stencils':
+                self.reply(200, {'stencil': save_stencil(json.loads(self.body()))})
             elif self.path == "/source":
                 self.reply(200, add_source(unquote(self.headers.get("X-Name", "untitled")), self.body()))
             elif self.path == "/folder-info":
@@ -226,7 +273,19 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/preview":
                 req, t0 = json.loads(self.body()), time.perf_counter()
                 jpg = collage.preview(req["p"], req["sources"], STORE, bool(req.get("map")), bool(req.get("grid")))
-                self.reply(200, jpg, "image/jpeg", X_Ms=str(round((time.perf_counter() - t0) * 1000)))
+                p = collage.clean(req['p'])
+                counts = shapes.counts(p, collage.layout(p, collage._sizes(req['sources'], STORE), p['w'], p['h']))
+                self.reply(200, jpg, "image/jpeg", X_Ms=str(round((time.perf_counter() - t0) * 1000)), X_Cut_Counts=json.dumps(counts))
+            elif self.path == '/luminosity/demo':
+                self.reply(200, add_source('demo-ripples.png', luminosity.demo_image()))
+            elif self.path == '/luminosity/preview':
+                req = json.loads(self.body())
+                self.reply(200, luminosity.mesh(req['p'], req['sources'], STORE, req['luminosity'], preview=True))
+            elif self.path.startswith('/luminosity/export/'):
+                req = json.loads(self.body())
+                data, name = luminosity.export(req['p'], req['sources'], STORE, req['luminosity'], self.path[19:])
+                saved = save_export(data, name)
+                self.reply(200, {'path': str(saved), 'name': saved.name})
             elif self.path.startswith('/animation/'):
                 fmt, req = self.path[11:], json.loads(self.body())
                 if fmt not in ('gif', 'mp4'):
@@ -235,6 +294,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200, data, 'image/gif' if fmt == 'gif' else 'video/mp4')
             elif self.path.startswith("/export/"):
                 fmt, req = self.path[8:], json.loads(self.body())
+                if fmt == 'txt' and 'luminosity' in req:
+                    req['p']['luminosity'] = luminosity.clean(req['luminosity'])
                 data, name = collage.export(req["p"], req["sources"], STORE, fmt, bool(req.get("lines")))
                 saved = save_export(data, name)
                 self.reply(200, {'path': str(saved), 'name': saved.name})
@@ -268,7 +329,7 @@ if __name__ == "__main__":
     first = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     for port in range(first, first + 10):
         if running(port) == STAMP:   # this exact code is already serving: just show it
-            print(f"collage is already running at http://127.0.0.1:{port}")
+            print(f"morphaic is already running at http://127.0.0.1:{port}")
             webbrowser.open(f"http://127.0.0.1:{port}")
             sys.exit()
         try:
@@ -278,6 +339,6 @@ if __name__ == "__main__":
             continue
     else:
         sys.exit(f"ports {first}-{first + 9} are all busy")
-    print(f"collage  http://127.0.0.1:{port}  (close this window to quit)")
+    print(f"morphaic  http://127.0.0.1:{port}  (close this window to quit)")
     threading.Timer(0.4, webbrowser.open, [f"http://127.0.0.1:{port}"]).start()
     server.serve_forever()

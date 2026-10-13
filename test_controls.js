@@ -1,0 +1,34 @@
+const assert = require('node:assert/strict'), M = require('./controls.js');
+const names = ['rectangle','ellipse','triangle','diamond','hexagon','star','heart','custom'];
+let weights = Object.fromEntries(names.map(name=>[name,name==='rectangle'?100:0]));
+weights = M.shares(weights,'ellipse',70,names.slice(0,-1));
+assert.equal(weights.rectangle,30); assert.equal(weights.ellipse,70);
+for (const name of names) for (const value of [0,1,17,33,99,100,140,-10]) {
+  weights = M.shares(weights,name,value,names);
+  assert.equal(Object.values(weights).reduce((a,b)=>a+b,0),100);
+  assert.ok(Object.values(weights).every(v=>Number.isInteger(v)&&v>=0&&v<=100));
+}
+const size = M.dimensions(254,'width',.75);
+assert.equal(size.width_mm,254); assert.equal(size.height_mm,190.5);
+assert.equal(M.dimensions(190.5,'height',.75).width_mm,254);
+assert.equal(M.dimensions(6000,'width',2).height_mm,5000);
+assert.equal(M.dimensions(NaN,'width',1),null);
+const locked={rectangle:30,ellipse:70,triangle:0};
+assert.deepEqual(M.shares(locked,'triangle',20,Object.keys(locked),{ellipse:true}),{rectangle:10,ellipse:70,triangle:20});
+assert.deepEqual(M.shares(locked,'ellipse',10,Object.keys(locked),{ellipse:true}),locked);
+assert.deepEqual(M.shares(locked,'triangle',100,Object.keys(locked),{ellipse:true}),{rectangle:0,ellipse:70,triangle:30});
+assert.deepEqual(M.shares(locked,'rectangle',5,Object.keys(locked),{ellipse:true,triangle:true}),locked);
+assert.deepEqual(M.viewerPosition(-500,400,500,300,900,600),{left:8,top:292});
+assert.deepEqual(M.viewerPosition(500,100,500,300,900,600),{left:392,top:100});
+const history=M.history({strokes:[],sealed:null});
+const stroke=[[.2,.2],[.8,.2]],cut={strokes:[stroke],sealed:null};
+history.record(cut);stroke[0][0]=.9;
+assert.equal(history.canUndo,true);assert.equal(history.canRedo,false);
+assert.deepEqual(history.undo(),{strokes:[],sealed:null});
+assert.deepEqual(history.redo(),{strokes:[[[.2,.2],[.8,.2]]],sealed:null});
+const sealed={strokes:[[[.2,.2],[.8,.2],[.5,.8]]],sealed:[[.2,.2],[.8,.2],[.5,.8]]};
+history.record(sealed);history.record({strokes:[],sealed:null});
+assert.deepEqual(history.undo(),sealed);assert.deepEqual(history.undo().sealed,null);
+history.record({strokes:[[[.1,.1]]],sealed:null});assert.equal(history.canRedo,false);
+assert.equal(history.redo(),null);
+console.log('ok: shape locks, exact percentages, linked dimensions, viewer bounds and cut undo/redo');
