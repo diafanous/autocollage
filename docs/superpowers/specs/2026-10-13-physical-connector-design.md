@@ -17,7 +17,7 @@ The controls should feel discoverable and inviting. They should communicate that
 - Let a walk-up visitor adjust all twenty AutoCollage sliders using four physical faders and five section buttons. Each button selects one bank of four parameters.
 - Keep parameter changes visible in the projected composition with responsive feedback.
 - Make the controller reusable with other applications through replaceable, declarative app profiles and a stable controller-to-host protocol.
-- Use the existing laptop, projector, USB webcam, A1 mini and P1S printers, white and black PLA, translucent PETG, and available woodshop as existing resources.
+- Use the existing laptop, Epson 4855 projector, USB webcam, A1 mini and P1S printers, white and black PLA, translucent PETG, and available woodshop as existing resources. Place the projector in an open bay beneath the controller. Include any newly purchased materials and hardware for the controller and projector bay in the US$30 cap; the user-provided projector and free supporting table/platform are not purchases for this budget.
 - Keep the purchase cost of every item required to build the first release at or below US$30 total, including shipping and tax.
 
 ## First-release scope
@@ -27,7 +27,7 @@ The first release includes the complete code, model, and required parts informat
 1. Controller firmware for wired USB-C to USB-C operation using USB CDC serial or an equally direct, documented USB serial interface.
 2. A host-side AutoCollage adapter integrated with the application or its supported app-side code. It must read/write application parameter state through an application-owned interface.
 3. A generic, versioned controller protocol and replaceable app profile format. AutoCollage is the first profile.
-4. Editable enclosure and control-panel CAD source plus printable STL files sized for the A1 mini and P1S. Design the assembly to work with the user's woodshop and owned filament.
+4. Editable enclosure, control-panel, and projector-bay CAD source plus printable STL files sized for the A1 mini and P1S. Design the assembly to work with the user's woodshop and owned filament. The controller sits above an open bay that accommodates the user's Epson 4855 projector.
 5. A complete parts list with component quantities, exact part/source links, quoted item prices, and the all-in total after shipping and tax.
 6. Wiring diagram, pin map, assembly steps, Windows setup instructions, operation guide, and troubleshooting notes.
 7. A documented verification procedure for USB connection, all controls, bank switching, parameter feedback, reconnection, and ordinary AutoCollage mouse/keyboard operation.
@@ -51,13 +51,19 @@ Use a direct app-side bridge or supported extension point. Do not use mouse move
 
 ## Cost and sourcing rule
 
-US$30 is an absolute landed-cost ceiling for all newly required purchased parts. Include shipping and tax and include a USB-C-to-USB-C data cable if the user cannot reuse one. The existing laptop, projector, webcam, printers, filament, and woodshop may be treated as already-owned resources; do not add their purchase cost.
+US$30 is an absolute landed-cost ceiling for the tactile controller and its projector bay, including all newly required purchased components and materials, shipping, and tax. Include a USB-C-to-USB-C data cable if the user cannot reuse one. The Epson 4855 projector is already owned, and the supporting table/platform is free; do not include their purchase cost. The existing laptop, webcam, printers, filament, and woodshop may also be treated as already-owned resources; do not add their purchase cost.
 
 Before declaring the BOM compliant, obtain a current quote for every required purchased item and calculate the delivered total for the user's shipping region. If a shipping region is unavailable, leave the BOM explicitly unverified and require a quoted all-in total at or below US$30 before locking component choices. Do not hide shipping, tax, small hardware, cable, or connectors outside the total. If the total exceeds the cap, revise the design or present a compliant alternative; never describe an over-budget design as meeting the limit.
 
 ## Physical design and materials
 
-Use a compact, durable, serviceable enclosure that can sit on a table or woodshop-built plinth and project above the work surface. Provide comfortable fader travel and buttons that can be identified by touch. Use simple printed parts where they improve repeatability, with optional wood parts that do not make the controller dependent on access to special tools beyond the stated woodshop. Provide CAD source, print orientation, material choice, and assembly access for replacement of switches, faders, and the controller board.
+Build a compact, durable, serviceable tactile-control surface above an open bay for the user's Epson 4855 projector. The supporting table/platform is free. The controller frame must be supported independently and must not rest on or load the projector. Preserve the projector lens path, controls, cable connections, service access, and airflow.
+
+The user identifies the projector as an Epson 4855; confirm its full model suffix and measure the actual unit before finalizing CAD. Epson's PowerLite 4855WU reference dimensions are 18.6 inches wide by 12.6 inches deep by 5.3 inches high excluding feet; the listed weight is 14.6 pounds without the cable cover. Treat these as planning figures only and allow for the actual feet, cable cover, connectors, and placement. [Epson PowerLite 4855WU dimensions](https://files.support.epson.com/docid/cpd3/cpd39100/Source/Specifications/Reference/PL4650_4855WU/spex_dimensions_pl4650_4855wu.html).
+
+Keep the bay open. Epson's [user guide](https://files.support.epson.com/docid/cpd3/cpd39100.pdf) requires at least 20 inches (50 cm) in front of the air intake and exhaust vents and warns against blocking vents or using a closed-in cabinet without proper ventilation. Do not finalize a slot or enclosure that obstructs those clearances; if a compact bay cannot preserve them, use an open frame/bridge on the free platform instead. Verify vent locations on the actual projector.
+
+Provide comfortable fader travel and buttons identifiable by touch. Use simple printed parts where they improve repeatability, with optional woodshop-built parts. Provide CAD source, print orientation, material choice, and access for replacing switches, faders, and the controller board.
 
 Design for the stated printers and available white/black PLA and translucent PETG. PETG is available but not mandatory. Use visible contrast and tactile labels; do not rely on color alone. Prioritize safe low-voltage USB-powered electronics, strain relief, rounded user-facing edges, and a replaceable USB cable.
 
@@ -84,5 +90,6 @@ The first release is ready for a build review when:
 - Switching banks does not cause unintended jumps; normal GUI edits remain usable.
 - The protocol and profile boundary make an additional application profile feasible without changing enclosure mechanics or firmware identities.
 - Windows setup is based on the latest stable AutoCollage Windows release and verified runtime requirements.
-- The BOM's quoted total including shipping and tax is at or below US$30; otherwise the design is not marked budget-compliant.
+- The BOM's quoted total for the controller and projector bay, including all required purchased parts/materials, shipping, and tax, is at or below US$30; otherwise the design is not marked budget-compliant.
+- The projector bay fits the measured Epson 4855 unit, supports the controller independently, and preserves the manual's required airflow clearance and the projection path.
 - Phase 2 remains deferred and separately scoped.
