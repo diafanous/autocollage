@@ -675,7 +675,8 @@ def test_luminosity_http_exports_and_cut_counts():
             for fmt in ('stl','3dm','png','tif'):
                 with post('/luminosity/export/'+fmt,request) as response:result=json.load(response)
                 saved=pathlib.Path(result['path'])
-                assert saved.parent==pathlib.Path(folder) and saved.stat().st_size>100
+                assert saved.parent==pathlib.Path(folder).resolve(), (saved,folder)
+                assert saved.stat().st_size>100, (fmt,saved.stat().st_size)
             with post('/export/txt',request) as response:result=json.load(response)
             data=json.loads(pathlib.Path(result['path']).read_text())
             assert data['parameters']['multi_shape'] and data['luminosity']['width_mm']==20
