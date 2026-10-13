@@ -38,7 +38,7 @@ Do not include webcam vision, Bluetooth, a force-sensing pen, interactive canvas
 
 The absolute maximum for newly purchased parts is US$30 landed, including shipping and tax. Count all required switches, faders, board, wire, fasteners, connectors, and a data-capable USB-C-to-USB-C cable if one cannot be reused. Do not count the user's already-owned laptop, projector, webcam, printers, filament, or woodshop tools.
 
-Before marking the BOM compliant, verify current prices and calculate the total delivered to the user's shipping region. If the region or a firm quote is unavailable, state that the total is unverified and require a quoted all-in price below US$30 before locking the BOM. If the design exceeds the cap, change it or show a feasible alternative; never present an over-budget list as compliant. Do not purchase components or place orders.
+Before marking the BOM compliant, verify current prices and calculate the total delivered to the user's shipping region. If the region or a firm quote is unavailable, state that the total is unverified and require a quoted all-in price at or below US$30 before locking the BOM. If the design exceeds the cap, change it or show a feasible alternative; never present an over-budget list as compliant. Do not purchase components or place orders.
 
 ## Branch layout
 
@@ -54,4 +54,4 @@ Git cannot have physical-connector as both a branch and a parent path for branch
 
 ## Definition of first-release completion
 
-The first release is ready for build review when a reader can obtain the source and quoted parts under the cap, print or make the enclosure, assemble and wire it, set it up on Windows with the current AutoCollage source, select any bank, control all twenty sliders without jumps, see parameter changes in the projected composition, recover from disconnects, and continue operating the application normally. Keep Phase 2 visibly deferred.
+The first release is ready for build review when a reader can obtain the source and quoted parts at or below the cap, print or make the enclosure, assemble and wire it, set it up on Windows with the current AutoCollage source, select any bank, control all twenty sliders without jumps, see parameter changes in the projected composition, recover from disconnects, and continue operating the application normally. Keep Phase 2 visibly deferred.
