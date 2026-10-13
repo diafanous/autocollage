@@ -14,15 +14,15 @@
 
 - Target `diafanous/autocollage`; use `physical-connector` as the umbrella branch based on `main`.
 - The latest Windows release at design time is v0.1.4; future implementation must recheck the latest stable Windows release.
-- Keep all first-release required purchases for both the controller and its open projector bay, shipping, tax, wiring, and a USB-C cable if needed at or below US$30. Treat the user-owned Epson 4855 projector and free supporting table/platform as no-cost resources; verify its full model and preserve manufacturer airflow clearances.
+- Keep all first-release required purchases for both the controller and its open projector bay, shipping, tax, wiring, and a USB-C cable if needed strictly below US$40 delivered to Brooklyn, NY. Amazon Prime may be used when the listing qualifies for delivery there; include checkout tax. Treat the user-owned Epson 4855 projector and free supporting table/platform as no-cost resources; verify its full model and preserve manufacturer airflow clearances.
 - First release is a wired USB-C-to-USB-C controller with replaceable app profiles; do not depend on screen coordinates.
-- The physical-controller design call is four linear faders banked across the twenty AutoCollage sliders and five momentary section buttons. The controller sits above an open bay for the user's Epson 4855; the user-provided table/platform is free, and the joint controller/bay purchase total must remain at or below US$30.
+- The physical-controller design call is four linear faders banked across the twenty AutoCollage sliders and five momentary section buttons. The controller sits above an open bay for the user's Epson 4855; the user-provided table/platform is free, and the joint controller/bay purchase total must remain below US$40 delivered to Brooklyn, NY, including shipping and tax; use Prime-eligible Amazon delivery when helpful.
 - Phase 2 camera and Bluetooth force-pen work is future scope only.
 - Do not modify the ChatGPT project's synced `sources/` files; make changes only in the specified GitHub repository.
 
 ## Review Focus
 
-- BOM price must include every required controller and projector-bay item and avoid exceeding US$30 after shipping and tax; the user-owned projector and free table/platform are excluded. Task 1 checks the fit and ventilation instructions.
+- BOM price must include every required controller and projector-bay item and remain below US$40 after shipping and tax to Brooklyn, NY; Amazon Prime is allowed when eligible. The user-owned projector and free table/platform are excluded. Task 1 checks the fit and ventilation instructions.
 - Windows version compatibility can change; Task 1 requires rechecking the latest stable release before implementation.
 - UI-coordinate automation would make the controller fragile; Task 1 prohibits it and requires a direct app-owned integration.
 - Webcam and Bluetooth pen work could leak into the first release; Task 1 makes the phase boundary explicit.
@@ -41,7 +41,7 @@
 - Consumes: the user-approved design for the projected AutoCollage experience, hardware, budget, reuse goal, phases, and branch layout.
 - Produces: a design spec recording intent, goals, non-goals, constraints, approved calls, and remaining builder choices; a root Codex instruction file that points to and operationalizes the spec.
 
-- [x] **Step 1: Write the design spec** with the first-release deliverables, current release baseline, available equipment, exact US$30 landed-cost rule and Epson projector-bay/ventilation requirements, USB serial architecture, physical-control assumptions, adaptable app profiles, branch names, and Phase 2 boundary.
+- [x] **Step 1: Write the design spec** with the first-release deliverables, current release baseline, available equipment, strict under-US$40 Brooklyn-delivered budget rule and Epson projector-bay/ventilation requirements, USB serial architecture, physical-control assumptions, adaptable app profiles, branch names, and Phase 2 boundary.
 - [x] **Step 2: Write root `AGENTS.md`** instructing Codex to read the spec, recheck the latest Windows release, keep the first release scoped, source and price every required component, avoid coordinate-based automation, and document/verify the controller and projector-bay build.
 - [x] **Step 3: Fetch both files from `physical-connector`** and confirm they exist as UTF-8 text and preserve every global constraint above.
 
