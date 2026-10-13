@@ -17,7 +17,7 @@ The controls should feel discoverable and inviting. They should communicate that
 - Let a walk-up visitor adjust all twenty AutoCollage sliders using four physical faders and five section buttons. Each button selects one bank of four parameters.
 - Keep parameter changes visible in the projected composition with responsive feedback.
 - Make the controller reusable with other applications through replaceable, declarative app profiles and a stable controller-to-host protocol.
-- Use the existing laptop, Epson 4855 projector, USB webcam, A1 mini and P1S printers, white and black PLA, translucent PETG, and available woodshop as existing resources. Place the projector in an open bay beneath the controller. Include any newly purchased materials and hardware for the controller and projector bay in the US$30 cap; the user-provided projector and free supporting table/platform are not purchases for this budget.
+- Use the existing laptop, Epson 4855 projector, USB webcam, A1 mini and P1S printers, white and black PLA, translucent PETG, and available woodshop as existing resources. Place the projector in an open bay beneath the controller. Include any newly purchased materials and hardware for the controller and projector bay in the under-US$40 landed-cost cap; the user-provided projector and free supporting table/platform are not purchases for this budget.
 - Keep the delivered purchase cost of the controller and open projector bay strictly below US$40 total, including shipping and tax, for delivery to Brooklyn, NY.
 
 ## First-release scope
