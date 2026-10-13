@@ -50,7 +50,7 @@ The umbrella branch is physical-connector. Put independent work on these topic b
 - physical-connector-bom-docs — parts sourcing, budget, wiring, assembly, and user documentation.
 - physical-connector-phase2-vision-pen — deferred webcam and Bluetooth force-pen exploration.
 
-Git cannot have physical-connector as both a branch and a parent path for branches named physical-connector/topic. Use the hyphenated names above. Work on the branch matching the change. Do not move or overwrite an existing branch ref. Do not merge, publish a release, or create a pull request unless the user asks.
+Git cannot have physical-connector as both a branch and a parent path for branches named physical-connector/topic. Use the hyphenated names above. Work on the branch matching the change. Do not update, reset, delete, or overwrite a topic branch that predates this work or contains work beyond the approved setup commits. Check that a topic branch name is free before creating it. Do not merge, publish a release, or create a pull request unless the user asks.
 
 ## Definition of first-release completion
 
