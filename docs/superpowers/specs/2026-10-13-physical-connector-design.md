@@ -1,7 +1,7 @@
 # Physical Connector Design
 
 Status: approved first-release design, ready for implementation planning  
-Repository: diafanous/autocollage  
+Repository: diafanous/morphaic (renamed from diafanous/autocollage)  
 Design date: 2026-10-13  
 Umbrella branch: physical-connector
 
