@@ -18,7 +18,7 @@ The controls should feel discoverable and inviting. They should communicate that
 - Keep parameter changes visible in the projected composition with responsive feedback.
 - Make the controller reusable with other applications through replaceable, declarative app profiles and a stable controller-to-host protocol.
 - Use the existing laptop, projector, USB webcam, A1 mini and P1S printers, white and black PLA, translucent PETG, and available woodshop as existing resources.
-- Keep the purchase cost of every item required to build the first release under US$30 total, including shipping and tax.
+- Keep the purchase cost of every item required to build the first release at or below US$30 total, including shipping and tax.
 
 ## First-release scope
 
@@ -53,7 +53,7 @@ Use a direct app-side bridge or supported extension point. Do not use mouse move
 
 US$30 is an absolute landed-cost ceiling for all newly required purchased parts. Include shipping and tax and include a USB-C-to-USB-C data cable if the user cannot reuse one. The existing laptop, projector, webcam, printers, filament, and woodshop may be treated as already-owned resources; do not add their purchase cost.
 
-Before declaring the BOM compliant, obtain a current quote for every required purchased item and calculate the delivered total for the user's shipping region. If a shipping region is unavailable, leave the BOM explicitly unverified and require a quoted all-in total under US$30 before locking component choices. Do not hide shipping, tax, small hardware, cable, or connectors outside the total. If the total exceeds the cap, revise the design or present a compliant alternative; never describe an over-budget design as meeting the limit.
+Before declaring the BOM compliant, obtain a current quote for every required purchased item and calculate the delivered total for the user's shipping region. If a shipping region is unavailable, leave the BOM explicitly unverified and require a quoted all-in total at or below US$30 before locking component choices. Do not hide shipping, tax, small hardware, cable, or connectors outside the total. If the total exceeds the cap, revise the design or present a compliant alternative; never describe an over-budget design as meeting the limit.
 
 ## Physical design and materials
 
@@ -84,5 +84,5 @@ The first release is ready for a build review when:
 - Switching banks does not cause unintended jumps; normal GUI edits remain usable.
 - The protocol and profile boundary make an additional application profile feasible without changing enclosure mechanics or firmware identities.
 - Windows setup is based on the latest stable AutoCollage Windows release and verified runtime requirements.
-- The BOM's quoted total including shipping and tax is below US$30; otherwise the design is not marked budget-compliant.
+- The BOM's quoted total including shipping and tax is at or below US$30; otherwise the design is not marked budget-compliant.
 - Phase 2 remains deferred and separately scoped.
